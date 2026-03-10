@@ -145,15 +145,15 @@ class SweepCompletionProvider : DebouncedInlineCompletionProvider() {
                                 // Also gather any inserted lines after this one
                                 val extraLines = gatherExtraLines(currentLines, predictedLines, cIdx, pIdx, predictedOffset)
                                 val result = newText + extraLines
-                                return result.take(300).trimEnd().ifEmpty { null }
+                                return result.take(1500).trimEnd().ifEmpty { null }
                             }
                         }
                     } else if (cIdx > cursorLineInWindow) {
                         // Change is after cursor - might be an insertion
-                        // Check if predicted has extra lines inserted here
-                        val insertedText = predLine
-                        if (insertedText.isNotBlank()) {
-                            return insertedText.take(300).trimEnd().ifEmpty { null }
+                        val extraLines = gatherExtraLines(currentLines, predictedLines, cIdx - 1, pIdx - 1, predictedOffset)
+                        val result = predLine + extraLines
+                        if (result.isNotBlank()) {
+                            return result.take(1500).trimEnd().ifEmpty { null }
                         }
                     }
                 }
@@ -163,9 +163,9 @@ class SweepCompletionProvider : DebouncedInlineCompletionProvider() {
         // Check if predicted has more lines (new lines added)
         val expectedPredEnd = currentLines.size + predictedOffset
         if (predictedLines.size > expectedPredEnd) {
-            val newLines = predictedLines.subList(expectedPredEnd, minOf(expectedPredEnd + 3, predictedLines.size))
+            val newLines = predictedLines.subList(expectedPredEnd, minOf(expectedPredEnd + 50, predictedLines.size))
             val text = newLines.joinToString("\n")
-            if (text.isNotBlank()) return "\n$text".take(300)
+            if (text.isNotBlank()) return "\n$text".take(1500)
         }
 
         return null
@@ -199,7 +199,7 @@ class SweepCompletionProvider : DebouncedInlineCompletionProvider() {
 
         // Look for lines in predicted that don't match current (inserted lines)
         var count = 0
-        while (pIdx < predictedLines.size && count < 3) {
+        while (pIdx < predictedLines.size && count < 50) {
             if (cIdx < currentLines.size && predictedLines[pIdx].trim() == currentLines[cIdx].trim()) {
                 break // back in sync
             }

@@ -22,10 +22,14 @@ object SweepClient {
 
     fun complete(prompt: String): String? {
         return try {
+            // ~4 chars per token; reserve remaining context window for generation
+            val promptTokensEstimate = prompt.length / 4
+            val maxPredict = (8192 - promptTokensEstimate).coerceIn(256, 4096)
+
             val requestBody = gson.toJson(
                 mapOf(
                     "prompt" to prompt,
-                    "n_predict" to 512,
+                    "n_predict" to maxPredict,
                     "temperature" to 0.0,
                     "stop" to listOf("<|file_sep|>", "</s>"),
                     "stream" to false
