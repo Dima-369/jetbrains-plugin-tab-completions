@@ -2,8 +2,10 @@ package dima.sweep
 
 import com.intellij.codeInsight.inline.completion.*
 import com.intellij.codeInsight.inline.completion.elements.InlineCompletionGrayTextElement
+import com.intellij.codeInsight.inline.completion.elements.InlineCompletionSkipTextElement
 import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionSingleSuggestion
 import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionSuggestion
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.readAction
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -26,19 +28,23 @@ class SweepCompletionProvider : DebouncedInlineCompletionProvider() {
         val document = request.document
         val offset = request.endOffset
 
-        val (textBeforeCursor, textAfterCursor, filePath, cursorLineIndex, cursorColInLine) = readAction {
+        val (textBeforeCursor, textAfterCursor, filePath, cursorColInLine) = readAction {
             val text = document.text
             val file = request.file
             val path = file.virtualFile?.name ?: file.name
             val lineNum = document.getLineNumber(offset)
             val lineStart = document.getLineStartOffset(lineNum)
             val col = offset - lineStart
-            CursorInfo(text.substring(0, offset), text.substring(offset), path, lineNum, col)
+            CursorInfo(text.substring(0, offset), text.substring(offset), path, col)
         }
 
         val prompt = buildSweepPrompt(filePath, textBeforeCursor, textAfterCursor)
 
-        val predicted = SweepClient.complete(prompt) ?: return InlineCompletionSuggestion.Empty
+        val predicted = SweepClient.complete(prompt)
+        if (predicted.isNullOrBlank()) {
+            publishDetectedEdits(request.editor, emptyList())
+            return InlineCompletionSuggestion.Empty
+        }
 
         // The "current" content we sent to the model
         val maxBeforeChars = 3000
@@ -53,15 +59,42 @@ class SweepCompletionProvider : DebouncedInlineCompletionProvider() {
 
         // Find cursor line within the window we sent
         val linesBeforeCursor = before.count { it == '\n' }
+        val windowStartOffset = offset - before.length
 
-        val suggestion = extractSuggestionByDiff(currentSent, predicted, linesBeforeCursor, cursorColInLine)
+        val detectedEdits = extractSuggestionByDiff(currentSent, predicted, linesBeforeCursor, cursorColInLine)
+            .map { edit ->
+                edit.copy(
+                    startOffset = (windowStartOffset + edit.startOffset).coerceIn(0, document.textLength),
+                    endOffset = (windowStartOffset + edit.endOffset).coerceIn(0, document.textLength),
+                )
+            }
 
-        SweepClient.log("cursorLine=$linesBeforeCursor cursorCol=$cursorColInLine suggestion='${suggestion?.take(200)}'")
+        publishDetectedEdits(request.editor, detectedEdits)
 
-        if (suggestion.isNullOrBlank()) return InlineCompletionSuggestion.Empty
+        SweepClient.log(
+            "cursorLine=$linesBeforeCursor cursorCol=$cursorColInLine edits=${detectedEdits.joinToString { "${it.startOffset}-${it.endOffset}:${it.replacement.take(80)}" }}"
+        )
+
+        val inlineEdit = detectedEdits.firstOrNull { it.startOffset == offset }
+            ?: return InlineCompletionSuggestion.Empty
+
+        val deletedText = if (inlineEdit.endOffset > inlineEdit.startOffset) {
+            document.getText(com.intellij.openapi.util.TextRange(inlineEdit.startOffset, inlineEdit.endOffset))
+        } else {
+            ""
+        }
+
+        if (inlineEdit.replacement.isEmpty() && deletedText.isEmpty()) {
+            return InlineCompletionSuggestion.Empty
+        }
 
         return InlineCompletionSingleSuggestion.build {
-            emit(InlineCompletionGrayTextElement(suggestion))
+            if (inlineEdit.replacement.isNotEmpty()) {
+                emit(InlineCompletionGrayTextElement(inlineEdit.replacement))
+            }
+            if (deletedText.isNotEmpty()) {
+                emit(InlineCompletionSkipTextElement(deletedText))
+            }
         }
     }
 
@@ -69,7 +102,6 @@ class SweepCompletionProvider : DebouncedInlineCompletionProvider() {
         val textBefore: String,
         val textAfter: String,
         val filePath: String,
-        val cursorLine: Int,
         val cursorCol: Int
     )
 
@@ -107,7 +139,7 @@ class SweepCompletionProvider : DebouncedInlineCompletionProvider() {
         predicted: String,
         cursorLineInWindow: Int,
         cursorCol: Int,
-    ): String? {
+    ): List<SweepEdit> {
         val currentLines = currentSent.lines()
         val predictedLines = predicted.lines()
 
@@ -115,60 +147,137 @@ class SweepCompletionProvider : DebouncedInlineCompletionProvider() {
         // Align: find which predicted line corresponds to current line 0
         // by matching the first non-empty current line
         val predictedOffset = findAlignment(currentLines, predictedLines)
+        val alignedPredictedLines = predictedLines.drop(predictedOffset)
 
-        SweepClient.log("Alignment offset=$predictedOffset, currentLines=${currentLines.size}, predictedLines=${predictedLines.size}")
+        SweepClient.log(
+            "Alignment offset=$predictedOffset, currentLines=${currentLines.size}, predictedLines=${predictedLines.size}, cursorLine=$cursorLineInWindow, cursorCol=$cursorCol"
+        )
 
-        // Walk lines around the cursor looking for differences
-        for (delta in 0..5) {
+        if (alignedPredictedLines.isEmpty()) return emptyList()
+
+        val mismatch = findNearestMismatch(currentLines, alignedPredictedLines, cursorLineInWindow)
+            ?: return emptyList()
+        val (currentStartLine, predictedStartLine) = mismatch
+
+        val resync = findResyncPoint(currentLines, alignedPredictedLines, currentStartLine, predictedStartLine)
+            ?: return emptyList()
+        val (currentEndLine, predictedEndLine) = resync
+
+        if (currentStartLine == currentEndLine && predictedStartLine == predictedEndLine) {
+            return emptyList()
+        }
+
+        SweepClient.log(
+            "Local diff current=$currentStartLine..$currentEndLine predicted=$predictedStartLine..$predictedEndLine"
+        )
+
+        val lineStartOffsets = computeLineStartOffsets(currentSent)
+        val blockStartOffset = lineStartOffsets.getOrElse(currentStartLine) { currentSent.length }
+        val blockEndOffset = if (currentEndLine < lineStartOffsets.size) {
+            lineStartOffsets[currentEndLine]
+        } else {
+            currentSent.length
+        }
+
+        val currentBlock = currentSent.substring(blockStartOffset, blockEndOffset)
+        val predictedBlock = blockText(alignedPredictedLines, predictedStartLine, predictedEndLine)
+
+        val commonPrefixChars = currentBlock.commonPrefixWith(predictedBlock).length
+        val currentRemainder = currentBlock.substring(commonPrefixChars)
+        val predictedRemainder = predictedBlock.substring(commonPrefixChars)
+        val commonSuffixChars = currentRemainder.commonSuffixWith(predictedRemainder).length
+
+        val editStartOffset = blockStartOffset + commonPrefixChars
+        val editEndOffset = (blockEndOffset - commonSuffixChars).coerceAtLeast(editStartOffset)
+        val replacementEnd = (predictedBlock.length - commonSuffixChars).coerceAtLeast(commonPrefixChars)
+        val replacement = predictedBlock.substring(commonPrefixChars, replacementEnd)
+
+        if (editStartOffset == editEndOffset && replacement.isEmpty()) {
+            return emptyList()
+        }
+
+        return listOf(
+            SweepEdit(
+                startOffset = editStartOffset,
+                endOffset = editEndOffset,
+                replacement = replacement,
+            )
+        )
+    }
+
+    private fun findNearestMismatch(
+        currentLines: List<String>,
+        predictedLines: List<String>,
+        cursorLineInWindow: Int,
+    ): Pair<Int, Int>? {
+        val maxLineIndex = minOf(currentLines.lastIndex, predictedLines.lastIndex)
+        if (maxLineIndex < 0) return null
+
+        for (delta in 0..maxLineIndex) {
             for (sign in listOf(0, 1, -1)) {
-                val cIdx = cursorLineInWindow + delta * sign
-                if (cIdx < 0 || cIdx >= currentLines.size) continue
-
-                val pIdx = cIdx + predictedOffset
-                if (pIdx < 0 || pIdx >= predictedLines.size) continue
-
-                val curLine = currentLines[cIdx]
-                val predLine = predictedLines[pIdx]
-
-                if (curLine != predLine) {
-                    // Found a difference!
-                    if (cIdx == cursorLineInWindow) {
-                        // Difference on cursor line: suggest text after cursor column
-                        val prefix = curLine.substring(0, minOf(cursorCol, curLine.length))
-                        val commonLen = predLine.commonPrefixWith(prefix).length
-
-                        if (commonLen >= cursorCol || cursorCol <= prefix.length) {
-                            // The predicted line extends beyond what's typed
-                            val insertAt = minOf(cursorCol, predLine.length)
-                            val newText = predLine.substring(insertAt)
-                            if (newText.isNotEmpty()) {
-                                // Also gather any inserted lines after this one
-                                val extraLines = gatherExtraLines(currentLines, predictedLines, cIdx, pIdx, predictedOffset)
-                                val result = newText + extraLines
-                                return result.take(1500).trimEnd().ifEmpty { null }
-                            }
-                        }
-                    } else if (cIdx > cursorLineInWindow) {
-                        // Change is after cursor - might be an insertion
-                        val extraLines = gatherExtraLines(currentLines, predictedLines, cIdx - 1, pIdx - 1, predictedOffset)
-                        val result = predLine + extraLines
-                        if (result.isNotBlank()) {
-                            return result.take(1500).trimEnd().ifEmpty { null }
-                        }
-                    }
+                val index = cursorLineInWindow + delta * sign
+                if (index !in 0..maxLineIndex) continue
+                if (currentLines[index] != predictedLines[index]) {
+                    return index to index
                 }
             }
         }
 
-        // Check if predicted has more lines (new lines added)
-        val expectedPredEnd = currentLines.size + predictedOffset
-        if (predictedLines.size > expectedPredEnd) {
-            val newLines = predictedLines.subList(expectedPredEnd, minOf(expectedPredEnd + 50, predictedLines.size))
-            val text = newLines.joinToString("\n")
-            if (text.isNotBlank()) return "\n$text".take(1500)
+        if (currentLines.size != predictedLines.size) {
+            val index = minOf(cursorLineInWindow.coerceAtLeast(0), minOf(currentLines.size, predictedLines.size))
+            return index to index
         }
 
         return null
+    }
+
+    private fun findResyncPoint(
+        currentLines: List<String>,
+        predictedLines: List<String>,
+        currentStartLine: Int,
+        predictedStartLine: Int,
+    ): Pair<Int, Int>? {
+        val maxSearchLines = 8
+
+        for (distance in 1..maxSearchLines) {
+            for (currentDelta in 0..distance) {
+                val predictedDelta = distance - currentDelta
+                val currentIndex = currentStartLine + currentDelta
+                val predictedIndex = predictedStartLine + predictedDelta
+
+                if (isResyncCandidate(currentLines, predictedLines, currentIndex, predictedIndex)) {
+                    return currentIndex to predictedIndex
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun isResyncCandidate(
+        currentLines: List<String>,
+        predictedLines: List<String>,
+        currentIndex: Int,
+        predictedIndex: Int,
+    ): Boolean {
+        if (currentIndex > currentLines.size || predictedIndex > predictedLines.size) {
+            return false
+        }
+
+        if (currentIndex == currentLines.size || predictedIndex == predictedLines.size) {
+            return false
+        }
+
+        val remainingCurrent = currentLines.size - currentIndex
+        val remainingPredicted = predictedLines.size - predictedIndex
+        val anchorLength = minOf(2, remainingCurrent, remainingPredicted)
+        if (anchorLength == 0) {
+            return false
+        }
+
+        return (0 until anchorLength).all { delta ->
+            currentLines[currentIndex + delta] == predictedLines[predictedIndex + delta]
+        }
     }
 
     private fun findAlignment(currentLines: List<String>, predictedLines: List<String>): Int {
@@ -185,29 +294,27 @@ class SweepCompletionProvider : DebouncedInlineCompletionProvider() {
         return 0
     }
 
-    private fun gatherExtraLines(
-        currentLines: List<String>,
-        predictedLines: List<String>,
-        curLineIdx: Int,
-        predLineIdx: Int,
-        offset: Int
-    ): String {
-        // Check if predicted has extra lines inserted after the current changed line
-        val sb = StringBuilder()
-        var pIdx = predLineIdx + 1
-        var cIdx = curLineIdx + 1
-
-        // Look for lines in predicted that don't match current (inserted lines)
-        var count = 0
-        while (pIdx < predictedLines.size && count < 50) {
-            if (cIdx < currentLines.size && predictedLines[pIdx].trim() == currentLines[cIdx].trim()) {
-                break // back in sync
+    private fun computeLineStartOffsets(text: String): List<Int> {
+        val offsets = mutableListOf(0)
+        text.forEachIndexed { index, ch ->
+            if (ch == '\n') {
+                offsets.add(index + 1)
             }
-            sb.append("\n").append(predictedLines[pIdx])
-            pIdx++
-            count++
         }
+        return offsets
+    }
 
-        return sb.toString()
+    private fun blockText(lines: List<String>, startLine: Int, endLine: Int): String {
+        if (startLine >= endLine) return ""
+
+        val text = lines.subList(startLine, endLine).joinToString("\n")
+        return if (endLine < lines.size) "$text\n" else text
+    }
+
+    private fun publishDetectedEdits(editor: com.intellij.openapi.editor.Editor, edits: List<SweepEdit>) {
+        ApplicationManager.getApplication().invokeLater {
+            if (editor.isDisposed) return@invokeLater
+            SweepSuggestedEditSupport.update(editor, edits)
+        }
     }
 }
