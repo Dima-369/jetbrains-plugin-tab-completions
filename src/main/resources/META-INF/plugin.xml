@@ -25,11 +25,16 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
-        <!-- <inline.completion.provider
+<!--
+         <inline.completion.provider
             id="dima.sweep.SweepCompletionProvider"
-            implementation="dima.sweep.SweepCompletionProvider"/> -->
-        <inline.completion.provider
+            implementation="dima.sweep.SweepCompletionProvider"/>
+-->
+        <!-- <inline.completion.provider
             id="dima.sweep.GenericCompletionProvider"
-            implementation="dima.sweep.GenericCompletionProvider"/>
+            implementation="dima.sweep.GenericCompletionProvider"/> -->
+        <inline.completion.provider
+            id="dima.sweep.FimCompletionProvider"
+            implementation="dima.sweep.FimCompletionProvider"/>
     </extensions>
 </idea-plugin>
