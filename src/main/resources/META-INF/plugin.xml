@@ -25,9 +25,11 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
+<!--
         <inline.completion.provider
             id="dima.sweep.SweepCompletionProvider"
             implementation="dima.sweep.SweepCompletionProvider"/>
+-->
         <!-- <inline.completion.provider
             id="dima.sweep.GenericCompletionProvider"
             implementation="dima.sweep.GenericCompletionProvider"/> -->
@@ -36,10 +38,12 @@
             implementation="dima.sweep.FimCompletionProvider"/>
     </extensions>
 
+<!--
     <actions>
         <action id="dima.sweep.actions.SmartSuggestedEdit"
                 class="dima.sweep.SweepSmartSuggestedEditAction"
                 text="Sweep: Show Suggested Edit"
                 description="Jump to or apply the detected Sweep edit"/>
     </actions>
+-->
 </idea-plugin>
