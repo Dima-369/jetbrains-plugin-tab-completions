@@ -20,6 +20,24 @@ class FimCompletionProvider : DebouncedInlineCompletionProvider() {
     override suspend fun getDebounceDelay(request: InlineCompletionRequest): Duration =
         100.milliseconds
 
+    private fun trimOverlapWithSuffix(prediction: String, suffix: String): String {
+        val predLines = prediction.lines()
+        val suffixLines = suffix.lines()
+        if (predLines.size <= 1 || suffixLines.isEmpty()) return prediction
+
+        // Find the longest suffix of prediction lines that matches a prefix of suffix lines
+        for (overlapLen in minOf(predLines.size, suffixLines.size) downTo 1) {
+            val predTail = predLines.takeLast(overlapLen)
+            val suffHead = suffixLines.take(overlapLen)
+            if (predTail.zip(suffHead).all { (a, b) -> a.trim() == b.trim() }) {
+                val kept = predLines.dropLast(overlapLen)
+                FimClient.log("FIM trimmed $overlapLen overlapping lines from suggestion")
+                return if (kept.isEmpty()) predLines.first() else kept.joinToString("\n")
+            }
+        }
+        return prediction
+    }
+
     override suspend fun getSuggestionDebounced(
         request: InlineCompletionRequest
     ): InlineCompletionSuggestion {
@@ -47,7 +65,8 @@ class FimCompletionProvider : DebouncedInlineCompletionProvider() {
             nPredict = FimClient.DEFAULT_N_PREDICT,
         ) ?: return InlineCompletionSuggestion.Empty
 
-        val suggestion = predicted.trimEnd()
+        val trimmed = trimOverlapWithSuffix(predicted, suffix)
+        val suggestion = trimmed.trimEnd()
 
         FimClient.log("FIM suggestion='${suggestion.take(200)}'")
 
