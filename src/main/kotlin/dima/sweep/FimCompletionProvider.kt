@@ -18,7 +18,7 @@ class FimCompletionProvider : DebouncedInlineCompletionProvider() {
     }
 
     override suspend fun getDebounceDelay(request: InlineCompletionRequest): Duration =
-        500.milliseconds
+        100.milliseconds
 
     override suspend fun getSuggestionDebounced(
         request: InlineCompletionRequest
@@ -44,7 +44,7 @@ class FimCompletionProvider : DebouncedInlineCompletionProvider() {
         val predicted = FimClient.complete(
             prefix = prefix,
             suffix = suffix,
-            nPredict = 256,
+            nPredict = FimClient.DEFAULT_N_PREDICT,
         ) ?: return InlineCompletionSuggestion.Empty
 
         val suggestion = predicted.trimEnd()

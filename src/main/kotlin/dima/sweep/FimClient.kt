@@ -10,6 +10,7 @@ import java.time.format.DateTimeFormatter
 
 object FimClient {
     private const val SERVER_URL = "http://localhost:8095/completion"
+    const val DEFAULT_N_PREDICT = 64
     private val gson = Gson()
     private val logFile = File(System.getProperty("user.home"), "sweep-plugin.log")
 
@@ -21,7 +22,7 @@ object FimClient {
     fun complete(
         prefix: String,
         suffix: String,
-        nPredict: Int = 256,
+        nPredict: Int = DEFAULT_N_PREDICT,
         temperature: Double = 0.0,
     ): String? {
         return try {
