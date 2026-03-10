@@ -23,115 +23,191 @@ class SweepCompletionProvider : DebouncedInlineCompletionProvider() {
     override suspend fun getSuggestionDebounced(
         request: InlineCompletionRequest
     ): InlineCompletionSuggestion {
-        val editor = request.editor
         val document = request.document
         val offset = request.endOffset
 
-        val (currentContent, filePath, linePrefix) = readAction {
+        val (textBeforeCursor, textAfterCursor, filePath, cursorLineIndex, cursorColInLine) = readAction {
             val text = document.text
             val file = request.file
-            val path = file.virtualFile?.path ?: file.name
-            val lineStart = document.getLineStartOffset(document.getLineNumber(offset))
-            val prefix = text.substring(lineStart, offset)
-            Triple(text, path, prefix)
+            val path = file.virtualFile?.name ?: file.name
+            val lineNum = document.getLineNumber(offset)
+            val lineStart = document.getLineStartOffset(lineNum)
+            val col = offset - lineStart
+            CursorInfo(text.substring(0, offset), text.substring(offset), path, lineNum, col)
         }
 
-        val prompt = buildSweepPrompt(
-            filePath = filePath,
-            currentContent = currentContent,
-        )
+        val prompt = buildSweepPrompt(filePath, textBeforeCursor, textAfterCursor)
 
         val predicted = SweepClient.complete(prompt) ?: return InlineCompletionSuggestion.Empty
 
-        // Compute the diff: find what text was added/changed compared to current
-        val suggestion = computeInlineSuggestion(currentContent, predicted, offset)
-            ?: return InlineCompletionSuggestion.Empty
+        // The "current" content we sent to the model
+        val maxBeforeChars = 3000
+        val maxAfterChars = 3000
+        val before = if (textBeforeCursor.length > maxBeforeChars) {
+            textBeforeCursor.takeLast(maxBeforeChars)
+        } else {
+            textBeforeCursor
+        }
+        val afterSnippet = textAfterCursor.take(maxAfterChars)
+        val currentSent = before + afterSnippet
 
-        if (suggestion.isBlank()) return InlineCompletionSuggestion.Empty
+        // Find cursor line within the window we sent
+        val linesBeforeCursor = before.count { it == '\n' }
+
+        val suggestion = extractSuggestionByDiff(currentSent, predicted, linesBeforeCursor, cursorColInLine)
+
+        SweepClient.log("cursorLine=$linesBeforeCursor cursorCol=$cursorColInLine suggestion='${suggestion?.take(200)}'")
+
+        if (suggestion.isNullOrBlank()) return InlineCompletionSuggestion.Empty
 
         return InlineCompletionSingleSuggestion.build {
             emit(InlineCompletionGrayTextElement(suggestion))
         }
     }
 
+    private data class CursorInfo(
+        val textBefore: String,
+        val textAfter: String,
+        val filePath: String,
+        val cursorLine: Int,
+        val cursorCol: Int
+    )
+
     private fun buildSweepPrompt(
         filePath: String,
-        currentContent: String,
+        textBeforeCursor: String,
+        textAfterCursor: String,
     ): String {
-        // Minimal prompt: just current file as both original and current
-        // The model predicts the "updated" version
+        val maxBeforeChars = 3000
+        val maxAfterChars = 3000
+        val before = if (textBeforeCursor.length > maxBeforeChars) {
+            textBeforeCursor.takeLast(maxBeforeChars)
+        } else {
+            textBeforeCursor
+        }
+
+        // For "original", strip the last line being typed (simulates "before this edit")
+        val lastNewline = before.lastIndexOf('\n')
+        val original = if (lastNewline >= 0) before.substring(0, lastNewline + 1) else ""
+
+        val afterSnippet = textAfterCursor.take(maxAfterChars)
+        val current = before + afterSnippet
+
         val parts = mutableListOf<String>()
         parts.add("<|file_sep|>original/$filePath")
-        parts.add(currentContent)
+        parts.add(original + afterSnippet)
         parts.add("<|file_sep|>current/$filePath")
-        parts.add(currentContent)
+        parts.add(current)
         parts.add("<|file_sep|>updated/$filePath")
         return parts.joinToString("\n")
     }
 
-    private fun computeInlineSuggestion(
-        currentContent: String,
-        predictedContent: String,
-        caretOffset: Int
+    private fun extractSuggestionByDiff(
+        currentSent: String,
+        predicted: String,
+        cursorLineInWindow: Int,
+        cursorCol: Int,
     ): String? {
-        // Find the first difference between current and predicted
-        val currentLines = currentContent.lines()
-        val predictedLines = predictedContent.lines()
+        val currentLines = currentSent.lines()
+        val predictedLines = predicted.lines()
 
-        // Find the line the caret is on
-        var charCount = 0
-        var caretLine = 0
-        for ((i, line) in currentLines.withIndex()) {
-            val lineEnd = charCount + line.length + 1 // +1 for \n
-            if (caretOffset <= charCount + line.length) {
-                caretLine = i
-                break
-            }
-            charCount = lineEnd
-            if (i == currentLines.lastIndex) caretLine = i
-        }
+        // The predicted often starts with a leading \n, so the first line is empty
+        // Align: find which predicted line corresponds to current line 0
+        // by matching the first non-empty current line
+        val predictedOffset = findAlignment(currentLines, predictedLines)
 
-        // Look for differences at or after the caret line
-        for (i in caretLine until minOf(currentLines.size, predictedLines.size)) {
-            val cur = currentLines[i]
-            val pred = predictedLines[i]
-            if (cur != pred) {
-                // Find the column where they diverge
-                val commonPrefix = cur.commonPrefixWith(pred)
-                val caretCol = if (i == caretLine) caretOffset - charCountForLine(currentContent, i) else 0
+        SweepClient.log("Alignment offset=$predictedOffset, currentLines=${currentLines.size}, predictedLines=${predictedLines.size}")
 
-                // Only suggest if the divergence is at or after caret position on the caret line
-                if (i == caretLine && commonPrefix.length < caretCol) continue
+        // Walk lines around the cursor looking for differences
+        for (delta in 0..5) {
+            for (sign in listOf(0, 1, -1)) {
+                val cIdx = cursorLineInWindow + delta * sign
+                if (cIdx < 0 || cIdx >= currentLines.size) continue
 
-                val insertionText = pred.substring(commonPrefix.length)
-                if (insertionText.isNotEmpty()) {
-                    // Also include any additional new lines from predicted
-                    val extraLines = if (predictedLines.size > currentLines.size) {
-                        val from = minOf(i + 1, predictedLines.size)
-                        val to = minOf(i + 1 + (predictedLines.size - currentLines.size), predictedLines.size)
-                        if (from < to) "\n" + predictedLines.subList(from, to).joinToString("\n") else ""
-                    } else ""
-                    return insertionText + extraLines
+                val pIdx = cIdx + predictedOffset
+                if (pIdx < 0 || pIdx >= predictedLines.size) continue
+
+                val curLine = currentLines[cIdx]
+                val predLine = predictedLines[pIdx]
+
+                if (curLine != predLine) {
+                    // Found a difference!
+                    if (cIdx == cursorLineInWindow) {
+                        // Difference on cursor line: suggest text after cursor column
+                        val prefix = curLine.substring(0, minOf(cursorCol, curLine.length))
+                        val commonLen = predLine.commonPrefixWith(prefix).length
+
+                        if (commonLen >= cursorCol || cursorCol <= prefix.length) {
+                            // The predicted line extends beyond what's typed
+                            val insertAt = minOf(cursorCol, predLine.length)
+                            val newText = predLine.substring(insertAt)
+                            if (newText.isNotEmpty()) {
+                                // Also gather any inserted lines after this one
+                                val extraLines = gatherExtraLines(currentLines, predictedLines, cIdx, pIdx, predictedOffset)
+                                val result = newText + extraLines
+                                return result.take(300).trimEnd().ifEmpty { null }
+                            }
+                        }
+                    } else if (cIdx > cursorLineInWindow) {
+                        // Change is after cursor - might be an insertion
+                        // Check if predicted has extra lines inserted here
+                        val insertedText = predLine
+                        if (insertedText.isNotBlank()) {
+                            return insertedText.take(300).trimEnd().ifEmpty { null }
+                        }
+                    }
                 }
             }
         }
 
-        // If predicted has more lines than current
-        if (predictedLines.size > currentLines.size) {
-            val newLines = predictedLines.subList(currentLines.size, predictedLines.size)
-            val newText = newLines.joinToString("\n")
-            if (newText.isNotBlank()) return "\n" + newText
+        // Check if predicted has more lines (new lines added)
+        val expectedPredEnd = currentLines.size + predictedOffset
+        if (predictedLines.size > expectedPredEnd) {
+            val newLines = predictedLines.subList(expectedPredEnd, minOf(expectedPredEnd + 3, predictedLines.size))
+            val text = newLines.joinToString("\n")
+            if (text.isNotBlank()) return "\n$text".take(300)
         }
 
         return null
     }
 
-    private fun charCountForLine(text: String, lineIndex: Int): Int {
-        var count = 0
-        for ((i, line) in text.lines().withIndex()) {
-            if (i == lineIndex) return count
-            count += line.length + 1
+    private fun findAlignment(currentLines: List<String>, predictedLines: List<String>): Int {
+        // The predicted output sometimes starts with \n<?php etc.
+        // Find offset so that currentLines[0] == predictedLines[offset]
+        if (currentLines.isEmpty() || predictedLines.isEmpty()) return 0
+
+        val firstNonEmpty = currentLines.firstOrNull { it.isNotBlank() } ?: return 0
+        for (i in 0..minOf(5, predictedLines.size - 1)) {
+            if (predictedLines[i].trim() == firstNonEmpty.trim()) {
+                return i
+            }
         }
-        return count
+        return 0
+    }
+
+    private fun gatherExtraLines(
+        currentLines: List<String>,
+        predictedLines: List<String>,
+        curLineIdx: Int,
+        predLineIdx: Int,
+        offset: Int
+    ): String {
+        // Check if predicted has extra lines inserted after the current changed line
+        val sb = StringBuilder()
+        var pIdx = predLineIdx + 1
+        var cIdx = curLineIdx + 1
+
+        // Look for lines in predicted that don't match current (inserted lines)
+        var count = 0
+        while (pIdx < predictedLines.size && count < 3) {
+            if (cIdx < currentLines.size && predictedLines[pIdx].trim() == currentLines[cIdx].trim()) {
+                break // back in sync
+            }
+            sb.append("\n").append(predictedLines[pIdx])
+            pIdx++
+            count++
+        }
+
+        return sb.toString()
     }
 }
