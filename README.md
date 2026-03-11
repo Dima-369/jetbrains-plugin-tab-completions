@@ -1,3 +1,17 @@
+# TODO
+
+- when cursor is at | below, there is never a completion shown?
+
+```php
+/**
+ *|
+ */
+class ...
+```
+
+- when I edit in one tab, say I add a line which does not exist yet in the db, assume `declare(strict_types=1);` and I go to another tab and enter that in,
+it is not suggested?
+
 # Local Sweep — JetBrains FIM Plugin
 
 A JetBrains plugin providing inline code completions via a local FIM (Fill-in-the-Middle) server.
