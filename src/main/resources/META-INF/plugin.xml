@@ -53,7 +53,7 @@
     <applicationListeners>
         <listener class="dima.sweep.localcomplete.listener.FileDeleteListener"
                   topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
-        <listener class="dima.sweep.localcomplete.listener.BackspaceTriggerListener"
+        <listener class="dima.sweep.localcomplete.listener.CompletionActionListener"
                   topic="com.intellij.openapi.actionSystem.ex.AnActionListener"/>
         <listener class="dima.sweep.localcomplete.listener.LocalCompleteShutdownListener"
                   topic="com.intellij.ide.AppLifecycleListener"/>

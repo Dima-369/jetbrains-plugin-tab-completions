@@ -2,7 +2,6 @@ package dima.sweep.localcomplete.listener
 
 import com.intellij.codeInsight.inline.completion.InlineCompletion
 import com.intellij.codeInsight.inline.completion.InlineCompletionEvent
-import dima.sweep.localcomplete.LocalCompleteKeys
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -10,8 +9,9 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.openapi.actionSystem.ex.AnActionListener
 import com.intellij.openapi.application.ApplicationManager
+import dima.sweep.localcomplete.LocalCompleteKeys
 
-class BackspaceTriggerListener : AnActionListener {
+class CompletionActionListener : AnActionListener {
     override fun beforeActionPerformed(action: AnAction, event: AnActionEvent) {
         val actionId = ActionManager.getInstance().getId(action) ?: return
         if (actionId !in tabAcceptActionIds) return
@@ -22,13 +22,13 @@ class BackspaceTriggerListener : AnActionListener {
 
     override fun afterActionPerformed(action: AnAction, event: AnActionEvent, result: com.intellij.openapi.actionSystem.AnActionResult) {
         val actionId = ActionManager.getInstance().getId(action) ?: return
-        val editor = CommonDataKeys.EDITOR.getData(event.dataContext) ?: return
+        val editor = CommonDataKeys.EDITOR.getData(event.dataContext)
 
-        if (actionId in tabAcceptActionIds) {
+        if (editor != null && actionId in tabAcceptActionIds) {
             editor.putUserData(LocalCompleteKeys.TAB_ACCEPT_IN_PROGRESS, null)
         }
 
-        if (actionId !in retriggerActionIds) return
+        if (actionId !in retriggerActionIds || editor == null) return
 
         val project = editor.project ?: return
         if (project.isDisposed) return

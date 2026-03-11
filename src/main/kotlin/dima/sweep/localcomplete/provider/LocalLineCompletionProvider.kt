@@ -12,6 +12,7 @@ import com.intellij.codeInsight.inline.completion.elements.InlineCompletionGrayT
 import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionSingleSuggestion
 import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionSuggestion
 import com.intellij.ide.DataManager
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -46,13 +47,17 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 val lineNumber = document.getLineNumber(offset)
                 if (offset != document.getLineEndOffset(lineNumber)) return
 
-                val caret = editor.caretModel.currentCaret
-                val dataContext = DataManager.getInstance().getDataContext(editor.contentComponent)
-                runCatching {
-                    EditorActionManager.getInstance().getActionHandler(IdeActions.ACTION_EDITOR_ENTER)
-                        .execute(editor, caret, dataContext)
-                }.onFailure {
-                    logger.warn("Failed to move caret to next line after inline completion insertion", it)
+                ApplicationManager.getApplication().invokeLater {
+                    if (editor.isDisposed) return@invokeLater
+
+                    val caret = editor.caretModel.currentCaret
+                    val dataContext = DataManager.getInstance().getDataContext(editor.contentComponent)
+                    runCatching {
+                        EditorActionManager.getInstance().getActionHandler(IdeActions.ACTION_EDITOR_ENTER)
+                            .execute(editor, caret, dataContext)
+                    }.onFailure {
+                        logger.warn("Failed to move caret to next line after inline completion insertion", it)
+                    }
                 }
             } finally {
                 environment.editor.putUserData(LocalCompleteKeys.TAB_ACCEPT_IN_PROGRESS, null)
