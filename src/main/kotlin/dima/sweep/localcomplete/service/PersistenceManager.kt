@@ -9,6 +9,7 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
 object PersistenceManager {
     private const val VERSION = 1
@@ -16,7 +17,8 @@ object PersistenceManager {
 
     fun save(records: List<FileRecord>) {
         Files.createDirectories(indexFile.parent)
-        DataOutputStream(BufferedOutputStream(Files.newOutputStream(indexFile))).use { output ->
+        val tmpFile = indexFile.resolveSibling("index.bin.tmp")
+        DataOutputStream(BufferedOutputStream(Files.newOutputStream(tmpFile))).use { output ->
             output.writeInt(VERSION)
             output.writeInt(records.size)
             for (record in records) {
@@ -32,6 +34,7 @@ object PersistenceManager {
                 }
             }
         }
+        Files.move(tmpFile, indexFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 
     fun load(): List<FileRecord> {

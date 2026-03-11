@@ -12,6 +12,7 @@ class FileSaveListener : FileDocumentManagerListener {
 
     override fun beforeDocumentSaving(document: Document) {
         val file = FileDocumentManager.getInstance().getFile(document) ?: return
+        if (file.fileType.isBinary) return
         val text = document.text
 
         ApplicationManager.getApplication().executeOnPooledThread {

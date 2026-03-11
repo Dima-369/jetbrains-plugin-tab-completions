@@ -9,10 +9,14 @@ import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.LocalFileSystem
+import dima.sweep.localcomplete.index.ContextHash
+import dima.sweep.localcomplete.index.LineFilter
 import com.intellij.util.concurrency.AppExecutorUtil
 import dima.sweep.localcomplete.index.LineIndex
 import dima.sweep.localcomplete.model.CursorContext
+import dima.sweep.localcomplete.model.FileRecord
 import dima.sweep.localcomplete.model.IndexStats
+import dima.sweep.localcomplete.model.IndexedLine
 import dima.sweep.localcomplete.model.RankedCompletion
 import dima.sweep.localcomplete.settings.LocalCompleteSettings
 import java.util.ArrayList
@@ -87,20 +91,27 @@ class LineIndexService {
     fun indexFile(path: String, content: String, extension: String) {
         ensureLoadedInBackground()
         val settings = LocalCompleteSettings.getInstance()
-        val sizeBytes = content.toByteArray().size.toLong()
+        val sizeBytes = content.length.toLong()
+
+        if (sizeBytes > settings.maxFileSizeBytes) {
+            lock.write {
+                lineIndex.removeFile(path)
+                dirty.set(true)
+            }
+            return
+        }
+
+        val fileRecord = buildFileRecord(
+            path = path,
+            content = content,
+            extension = extension,
+            sizeBytes = sizeBytes,
+            maxLineLength = settings.skipLongerColumnLines,
+        )
 
         lock.write {
             lineIndex.removeFile(path)
-            if (sizeBytes <= settings.maxFileSizeBytes) {
-                lineIndex.indexFile(
-                    path = path,
-                    content = content,
-                    extension = extension,
-                    timestamp = System.currentTimeMillis(),
-                    sizeBytes = sizeBytes,
-                    maxLineLength = settings.skipLongerColumnLines,
-                )
-            }
+            lineIndex.loadFileRecord(fileRecord)
             dirty.set(true)
         }
     }
@@ -146,6 +157,7 @@ class LineIndexService {
         val fileData = ApplicationManager.getApplication().runReadAction<List<Triple<String, String, String>>> {
             paths.mapNotNull { path ->
                 val virtualFile = LocalFileSystem.getInstance().findFileByPath(path) ?: return@mapNotNull null
+                if (virtualFile.fileType.isBinary) return@mapNotNull null
                 val document = FileDocumentManager.getInstance().getDocument(virtualFile) ?: return@mapNotNull null
                 Triple(path, document.text, virtualFile.extension.orEmpty())
             }
@@ -163,13 +175,47 @@ class LineIndexService {
     private fun evictIfNeeded() {
         val maxRememberedFiles = LocalCompleteSettings.getInstance().maxRememberedFiles
         lock.write {
-            val paths = lineIndex.oldestPathsFirst()
-            if (paths.size <= maxRememberedFiles) return
+            val stats = lineIndex.getStats()
+            if (stats.fileCount <= maxRememberedFiles) return
 
-            paths.take(paths.size - maxRememberedFiles).forEach { path ->
+            lineIndex.oldestFilesFirst(stats.fileCount - maxRememberedFiles).forEach { path ->
                 lineIndex.removeFile(path)
                 dirty.set(true)
             }
         }
+    }
+
+    private fun buildFileRecord(
+        path: String,
+        content: String,
+        extension: String,
+        sizeBytes: Long,
+        maxLineLength: Int,
+    ): FileRecord {
+        val rawLines = content.split('\n')
+        val indexedLines = rawLines.mapIndexedNotNull { index, rawLine ->
+            val originalLine = rawLine.removeSuffix("\r")
+            val normalizedContent = originalLine.trim()
+            if (LineFilter.shouldSkip(normalizedContent, originalLine.length, maxLineLength)) {
+                return@mapIndexedNotNull null
+            }
+
+            IndexedLine(
+                normalizedContent = normalizedContent,
+                originalContent = originalLine,
+                leadingWhitespace = originalLine.takeWhile { it == ' ' || it == '\t' },
+                sourceFilePath = path,
+                lineNumber = index + 1,
+                contextHash = ContextHash.forLine(rawLines, index),
+            )
+        }
+
+        return FileRecord(
+            absolutePath = path,
+            extension = extension,
+            lastIndexedTimestamp = System.currentTimeMillis(),
+            lines = indexedLines,
+            sizeBytes = sizeBytes,
+        )
     }
 }

@@ -44,7 +44,8 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             val suffixText = lineText.substring(caretColumn)
             val normalizedPrefix = prefixText.trimStart()
             val settings = LocalCompleteSettings.getInstance()
-            if (normalizedPrefix.length < settings.minPrefixLength) return@readAction null
+            val allowBlankLineCompletion = normalizedPrefix.isEmpty() && lineText.isBlank()
+            if (!allowBlankLineCompletion && normalizedPrefix.length < settings.minPrefixLength) return@readAction null
 
             val allLines = document.text.split('\n').map { it.removeSuffix("\r") }
             CursorContext(
@@ -83,7 +84,11 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             return remaining
         }
 
-        if (!remaining.endsWith(context.rawSuffixText)) return null
-        return remaining.removeSuffix(context.rawSuffixText)
+        val suffixIndex = remaining.indexOf(context.rawSuffixText)
+        if (suffixIndex > 0) {
+            return remaining.substring(0, suffixIndex)
+        }
+
+        return null
     }
 }

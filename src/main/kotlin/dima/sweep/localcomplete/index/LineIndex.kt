@@ -11,7 +11,7 @@ import java.util.TreeMap
 
 class LineIndex {
     private val lineMap = TreeMap<String, MutableList<IndexedLine>>()
-    private val fileMap = LinkedHashMap<String, FileRecord>(16, 0.75f, true)
+    private val fileMap = LinkedHashMap<String, FileRecord>()
 
     fun indexFile(path: String, content: String, extension: String, timestamp: Long, sizeBytes: Long, maxLineLength: Int) {
         removeFile(path)
@@ -50,10 +50,14 @@ class LineIndex {
     fun loadRecords(records: List<FileRecord>) {
         clear()
         for (record in records) {
-            fileMap[record.absolutePath] = record
-            record.lines.forEach { line ->
-                lineMap.getOrPut(line.normalizedContent) { mutableListOf() }.add(line)
-            }
+            loadFileRecord(record)
+        }
+    }
+
+    fun loadFileRecord(record: FileRecord) {
+        fileMap[record.absolutePath] = record
+        record.lines.forEach { line ->
+            lineMap.getOrPut(line.normalizedContent) { mutableListOf() }.add(line)
         }
     }
 
@@ -69,12 +73,14 @@ class LineIndex {
     }
 
     fun query(prefix: String, cursorContext: CursorContext, limit: Int): List<RankedCompletion> {
-        if (prefix.isBlank()) return emptyList()
-        val candidates = lineMap.subMap(prefix, true, prefix + '\uffff', true)
-            .values
-            .asSequence()
-            .flatten()
-            .filterNot { it.sourceFilePath == cursorContext.filePath && it.lineNumber == cursorContext.lineNumber }
+        val candidates = if (prefix.isBlank()) {
+            blankLineCandidates(cursorContext)
+        } else {
+            lineMap.subMap(prefix, true, prefix + '\uffff', true)
+                .values
+                .asSequence()
+                .flatten()
+        }.filterNot { it.sourceFilePath == cursorContext.filePath && it.lineNumber == cursorContext.lineNumber }
 
         return CompletionRanker.rank(
             candidates = candidates,
@@ -85,9 +91,27 @@ class LineIndex {
         )
     }
 
+    private fun blankLineCandidates(cursorContext: CursorContext): Sequence<IndexedLine> {
+        val allCandidates = fileMap.values.asSequence()
+            .flatMap { it.lines.asSequence() }
+            .toList()
+
+        val exactContextMatches = allCandidates.filter { it.contextHash == cursorContext.contextHash }
+        return if (exactContextMatches.isNotEmpty()) {
+            exactContextMatches.asSequence()
+        } else {
+            allCandidates.asSequence()
+        }
+    }
+
     fun getRecords(): List<FileRecord> = fileMap.values.toList()
 
-    fun oldestPathsFirst(): List<String> = fileMap.keys.toList()
+    fun oldestFilesFirst(count: Int): List<String> {
+        return fileMap.values
+            .sortedBy { it.lastIndexedTimestamp }
+            .take(count)
+            .map { it.absolutePath }
+    }
 
     fun getStats(): IndexStats {
         return IndexStats(

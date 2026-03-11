@@ -12,6 +12,7 @@ class FileOpenListener : FileEditorManagerListener {
 
     override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
         if (file.isDirectory) return
+        if (file.fileType.isBinary) return
         LineIndexService.getInstance().ensureLoadedInBackground()
 
         ApplicationManager.getApplication().executeOnPooledThread {
