@@ -2,13 +2,22 @@ package dima.sweep.localcomplete.provider
 
 import com.intellij.codeInsight.inline.completion.DebouncedInlineCompletionProvider
 import com.intellij.codeInsight.inline.completion.InlineCompletionEvent
+import com.intellij.codeInsight.inline.completion.InlineCompletionInsertEnvironment
+import com.intellij.codeInsight.inline.completion.InlineCompletionInsertHandler
 import com.intellij.codeInsight.inline.completion.InlineCompletionProviderID
 import com.intellij.codeInsight.inline.completion.InlineCompletionRequest
+import com.intellij.codeInsight.inline.completion.DefaultInlineCompletionInsertHandler
+import com.intellij.codeInsight.inline.completion.elements.InlineCompletionElement
 import com.intellij.codeInsight.inline.completion.elements.InlineCompletionGrayTextElement
 import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionSingleSuggestion
 import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionSuggestion
+import com.intellij.ide.DataManager
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.actionSystem.IdeActions
+import com.intellij.openapi.editor.actionSystem.CaretSpecificDataContext
+import com.intellij.openapi.editor.actionSystem.EditorActionManager
+import dima.sweep.localcomplete.LocalCompleteKeys
 import dima.sweep.localcomplete.index.ContextHash
 import dima.sweep.localcomplete.model.CursorContext
 import dima.sweep.localcomplete.model.IndexedLine
@@ -19,6 +28,34 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
     override val id = InlineCompletionProviderID("dima.sweep.localcomplete.LocalLineCompletionProvider")
+
+    override val insertHandler: InlineCompletionInsertHandler = object : DefaultInlineCompletionInsertHandler() {
+        override fun afterInsertion(environment: InlineCompletionInsertEnvironment, elements: List<InlineCompletionElement>) {
+            try {
+                super.afterInsertion(environment, elements)
+
+                val settings = LocalCompleteSettings.getInstance()
+                val editor = environment.editor
+                if (!settings.moveCaretDownOnTabAccept) return
+                if (editor.getUserData(LocalCompleteKeys.TAB_ACCEPT_IN_PROGRESS) != true) return
+
+                val offset = editor.caretModel.offset
+                val document = editor.document
+                val lineNumber = document.getLineNumber(offset)
+                if (offset != document.getLineEndOffset(lineNumber)) return
+
+                val caret = editor.caretModel.currentCaret
+                val dataContext = CaretSpecificDataContext.create(
+                    DataManager.getInstance().getDataContext(editor.contentComponent),
+                    caret,
+                )
+                EditorActionManager.getInstance().getActionHandler(IdeActions.ACTION_EDITOR_ENTER)
+                    .execute(editor, caret, dataContext)
+            } finally {
+                environment.editor.putUserData(LocalCompleteKeys.TAB_ACCEPT_IN_PROGRESS, null)
+            }
+        }
+    }
 
     override fun isEnabled(event: InlineCompletionEvent): Boolean {
         return LocalCompleteSettings.getInstance().enabled &&

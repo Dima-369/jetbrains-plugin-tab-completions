@@ -16,6 +16,7 @@ class LocalCompleteSettings : SerializablePersistentStateComponent<LocalComplete
         val debounceMs: Int = 100,
         val minPrefixLength: Int = 1,
         val enabled: Boolean = true,
+        val moveCaretDownOnTabAccept: Boolean = false,
     )
 
     companion object {
@@ -56,5 +57,11 @@ class LocalCompleteSettings : SerializablePersistentStateComponent<LocalComplete
         get() = state.enabled
         set(value) {
             updateState { it.copy(enabled = value) }
+        }
+
+    var moveCaretDownOnTabAccept: Boolean
+        get() = state.moveCaretDownOnTabAccept
+        set(value) {
+            updateState { it.copy(moveCaretDownOnTabAccept = value) }
         }
 }

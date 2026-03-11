@@ -14,6 +14,10 @@ class LocalCompleteConfigurable : BoundConfigurable("Local Line Complete") {
             checkBox("Enable local line completion")
                 .bindSelected(settings::enabled)
         }
+        row {
+            checkBox("After Tab accept at end of line, move caret to next indented line")
+                .bindSelected(settings::moveCaretDownOnTabAccept)
+        }
         row("Max remembered files") {
             intTextField(1..10_000)
                 .bindIntText(settings::maxRememberedFiles)
