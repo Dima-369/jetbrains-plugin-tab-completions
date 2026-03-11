@@ -4,7 +4,9 @@ import dima.sweep.localcomplete.model.CursorContext
 import dima.sweep.localcomplete.model.FileRecord
 import dima.sweep.localcomplete.model.IndexedLine
 import dima.sweep.localcomplete.model.RankedCompletion
+import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 object CompletionRanker {
     fun rank(
@@ -18,10 +20,21 @@ object CompletionRanker {
         val oldest = timestamps.minOrNull() ?: 0L
         val newest = timestamps.maxOrNull() ?: oldest
 
-        return candidates
-            .mapNotNull { candidate ->
-                val fileRecord = fileRecordByPath(candidate.sourceFilePath) ?: return@mapNotNull null
-                RankedCompletion(candidate, score(candidate, fileRecord, cursorContext, oldest, newest))
+        val grouped = LinkedHashMap<String, MutableList<IndexedLine>>()
+        for (candidate in candidates) {
+            grouped.getOrPut(candidate.normalizedContent) { mutableListOf() }.add(candidate)
+        }
+
+        return grouped.values
+            .mapNotNull { group ->
+                val frequency = group.distinctBy { it.sourceFilePath }.size
+                group.mapNotNull candidateLoop@{ candidate ->
+                    val fileRecord = fileRecordByPath(candidate.sourceFilePath) ?: return@candidateLoop null
+                    RankedCompletion(
+                        candidate,
+                        score(candidate, fileRecord, cursorContext, oldest, newest, frequency),
+                    )
+                }.maxByOrNull { it.score }
             }
             .sortedByDescending { it.score }
             .take(limit)
@@ -34,6 +47,7 @@ object CompletionRanker {
         cursorContext: CursorContext,
         oldest: Long,
         newest: Long,
+        frequency: Int,
     ): Double {
         val contextSimilarity = if (candidate.contextHash == cursorContext.contextHash) 1.0 else 0.0
         val extensionMatch = if (fileRecord.extension == cursorContext.fileExtension) 1.0 else 0.0
@@ -41,24 +55,40 @@ object CompletionRanker {
             newest <= oldest -> 1.0
             else -> (fileRecord.lastIndexedTimestamp - oldest).toDouble() / max(1L, newest - oldest).toDouble()
         }
-        val proximity = proximity(candidate.sourceFilePath, cursorContext)
+        val proximity = proximity(candidate, cursorContext)
         val prefixRatio = cursorContext.normalizedPrefix.length.toDouble() /
             max(1, candidate.normalizedContent.length).toDouble()
+        val freqScore = 1.0 - (1.0 / frequency)
+        val contentQuality = contentQuality(candidate.normalizedContent)
+        val lengthValue = min(candidate.normalizedContent.length, 80).toDouble() / 80.0
 
-        return (50.0 * contextSimilarity) +
-            (20.0 * extensionMatch) +
-            (15.0 * recency) +
-            (10.0 * proximity) +
-            (5.0 * prefixRatio)
+        return (40.0 * contextSimilarity) +
+            (15.0 * extensionMatch) +
+            (15.0 * freqScore) +
+            (10.0 * recency) +
+            (8.0 * proximity) +
+            (5.0 * contentQuality) +
+            (4.0 * lengthValue) +
+            (3.0 * prefixRatio)
     }
 
-    private fun proximity(candidatePath: String, cursorContext: CursorContext): Double {
-        if (candidatePath == cursorContext.filePath) return 1.0
-        val candidateDir = candidatePath.substringBeforeLast('/', missingDelimiterValue = "")
+    private fun contentQuality(content: String): Double {
+        if (content.isEmpty()) return 0.0
+        val alphanumericCount = content.count { it.isLetterOrDigit() }
+        return alphanumericCount.toDouble() / content.length.toDouble()
+    }
+
+    private fun proximity(candidate: IndexedLine, cursorContext: CursorContext): Double {
+        if (candidate.sourceFilePath == cursorContext.filePath) {
+            val distance = abs(candidate.lineNumber - cursorContext.lineNumber)
+            return 0.7 + 0.3 / (1.0 + distance / 20.0)
+        }
+
+        val candidateDir = candidate.sourceFilePath.substringBeforeLast('/', missingDelimiterValue = "")
         val currentDir = cursorContext.filePath.substringBeforeLast('/', missingDelimiterValue = "")
-        if (candidateDir.isNotEmpty() && candidateDir == currentDir) return 0.7
+        if (candidateDir.isNotEmpty() && candidateDir == currentDir) return 0.5
 
         val basePath = cursorContext.projectBasePath ?: return 0.0
-        return if (candidatePath.startsWith(basePath)) 0.3 else 0.0
+        return if (candidate.sourceFilePath.startsWith(basePath)) 0.2 else 0.0
     }
 }

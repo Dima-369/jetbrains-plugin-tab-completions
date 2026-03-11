@@ -19,8 +19,8 @@ class LineIndex {
         val rawLines = content.split('\n')
         val indexedLines = rawLines.mapIndexedNotNull { index, rawLine ->
             val originalLine = rawLine.removeSuffix("\r")
-            val normalizedContent = originalLine.trimStart()
-            if (LineFilter.shouldSkip(normalizedContent.trim(), originalLine.length, maxLineLength)) {
+            val normalizedContent = originalLine.trim()
+            if (LineFilter.shouldSkip(normalizedContent, originalLine.length, maxLineLength)) {
                 return@mapIndexedNotNull null
             }
 

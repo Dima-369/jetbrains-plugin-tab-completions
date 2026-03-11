@@ -49,7 +49,7 @@ object PersistenceManager {
                 val lines = List(input.readInt()) {
                     val originalContent = input.readUTF()
                     IndexedLine(
-                        normalizedContent = originalContent.trimStart(),
+                        normalizedContent = originalContent.trim(),
                         originalContent = originalContent,
                         leadingWhitespace = originalContent.takeWhile { ch -> ch == ' ' || ch == '\t' },
                         sourceFilePath = absolutePath,
