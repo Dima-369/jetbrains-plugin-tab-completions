@@ -2,17 +2,32 @@ package dima.sweep.localcomplete.index
 
 object ContextHash {
     fun forLine(lines: List<String>, targetLineIndex: Int): Long {
-        val collected = ArrayList<String>(3)
+        val collected = collectContextLines(lines, targetLineIndex, 3)
+        if (collected.isEmpty()) return 0L
+        return hash(collected.asReversed())
+    }
+
+    fun forLineGraduated(lines: List<String>, targetLineIndex: Int): List<Long> {
+        val collected = collectContextLines(lines, targetLineIndex, 3)
+        if (collected.isEmpty()) return listOf(0L)
+
+        val reversed = collected.asReversed()
+        return List(reversed.size) { index ->
+            hash(reversed.subList(index, reversed.size))
+        }
+    }
+
+    private fun collectContextLines(lines: List<String>, targetLineIndex: Int, maxCount: Int): List<String> {
+        val collected = ArrayList<String>(maxCount)
         var index = targetLineIndex - 1
-        while (index >= 0 && collected.size < 3) {
+        while (index >= 0 && collected.size < maxCount) {
             val normalized = normalizeContextLine(lines[index])
             if (normalized.isNotEmpty()) {
                 collected += normalized
             }
             index--
         }
-        if (collected.isEmpty()) return 0L
-        return hash(collected.asReversed())
+        return collected
     }
 
     private fun normalizeContextLine(line: String): String {

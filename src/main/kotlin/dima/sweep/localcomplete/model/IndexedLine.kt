@@ -6,5 +6,8 @@ data class IndexedLine(
     val leadingWhitespace: String,
     val sourceFilePath: String,
     val lineNumber: Int,
-    val contextHash: Long,
-)
+    val contextHashes: List<Long>,
+) {
+    val contextHash: Long
+        get() = contextHashes.firstOrNull() ?: 0L
+}

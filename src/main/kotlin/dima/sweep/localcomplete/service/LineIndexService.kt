@@ -206,7 +206,7 @@ class LineIndexService {
                 leadingWhitespace = originalLine.takeWhile { it == ' ' || it == '\t' },
                 sourceFilePath = path,
                 lineNumber = index + 1,
-                contextHash = ContextHash.forLine(rawLines, index),
+                contextHashes = ContextHash.forLineGraduated(rawLines, index),
             )
         }
 

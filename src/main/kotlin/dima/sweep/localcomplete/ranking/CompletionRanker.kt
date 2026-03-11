@@ -49,7 +49,11 @@ object CompletionRanker {
         newest: Long,
         frequency: Int,
     ): Double {
-        val contextSimilarity = if (candidate.contextHash == cursorContext.contextHash) 1.0 else 0.0
+        val contextSimilarity = when {
+            candidate.contextHash != 0L && candidate.contextHash == cursorContext.contextHash -> 1.0
+            candidate.contextHashes.any { hash -> hash != 0L && cursorContext.contextHashes.contains(hash) } -> 0.5
+            else -> 0.0
+        }
         val extensionMatch = if (fileRecord.extension == cursorContext.fileExtension) 1.0 else 0.0
         val recency = when {
             newest <= oldest -> 1.0

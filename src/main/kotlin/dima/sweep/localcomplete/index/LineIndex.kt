@@ -6,11 +6,13 @@ import dima.sweep.localcomplete.model.IndexStats
 import dima.sweep.localcomplete.model.IndexedLine
 import dima.sweep.localcomplete.model.RankedCompletion
 import dima.sweep.localcomplete.ranking.CompletionRanker
+import java.util.HashMap
 import java.util.LinkedHashMap
 import java.util.TreeMap
 
 class LineIndex {
     private val lineMap = TreeMap<String, MutableList<IndexedLine>>()
+    private val contextMap = HashMap<Long, MutableList<IndexedLine>>()
     private val fileMap = LinkedHashMap<String, FileRecord>()
 
     fun indexFile(path: String, content: String, extension: String, timestamp: Long, sizeBytes: Long, maxLineLength: Int) {
@@ -30,7 +32,7 @@ class LineIndex {
                 leadingWhitespace = originalLine.takeWhile { it == ' ' || it == '\t' },
                 sourceFilePath = path,
                 lineNumber = index + 1,
-                contextHash = ContextHash.forLine(rawLines, index),
+                contextHashes = ContextHash.forLineGraduated(rawLines, index),
             )
         }
 
@@ -41,10 +43,7 @@ class LineIndex {
             lines = indexedLines,
             sizeBytes = sizeBytes,
         )
-        fileMap[path] = fileRecord
-        indexedLines.forEach { line ->
-            lineMap.getOrPut(line.normalizedContent) { mutableListOf() }.add(line)
-        }
+        loadFileRecord(fileRecord)
     }
 
     fun loadRecords(records: List<FileRecord>) {
@@ -58,23 +57,46 @@ class LineIndex {
         fileMap[record.absolutePath] = record
         record.lines.forEach { line ->
             lineMap.getOrPut(line.normalizedContent) { mutableListOf() }.add(line)
+            for (hash in line.contextHashes) {
+                if (hash != 0L) {
+                    contextMap.getOrPut(hash) { mutableListOf() }.add(line)
+                }
+            }
         }
     }
 
     fun removeFile(path: String) {
         val record = fileMap.remove(path) ?: return
         record.lines.forEach { line ->
-            val bucket = lineMap[line.normalizedContent] ?: return@forEach
-            bucket.removeIf { it.sourceFilePath == path && it.lineNumber == line.lineNumber }
-            if (bucket.isEmpty()) {
-                lineMap.remove(line.normalizedContent)
+            val bucket = lineMap[line.normalizedContent]
+            if (bucket != null) {
+                bucket.removeIf { it.sourceFilePath == path && it.lineNumber == line.lineNumber }
+                if (bucket.isEmpty()) {
+                    lineMap.remove(line.normalizedContent)
+                }
+            }
+
+            for (hash in line.contextHashes) {
+                if (hash != 0L) {
+                    val contextBucket = contextMap[hash]
+                    if (contextBucket != null) {
+                        contextBucket.removeIf { it.sourceFilePath == path && it.lineNumber == line.lineNumber }
+                        if (contextBucket.isEmpty()) {
+                            contextMap.remove(hash)
+                        }
+                    }
+                }
             }
         }
     }
 
     fun query(prefix: String, cursorContext: CursorContext, limit: Int): List<RankedCompletion> {
         val candidates = if (prefix.isBlank()) {
-            blankLineCandidates(cursorContext)
+            cursorContext.contextHashes
+                .filter { it != 0L }
+                .firstNotNullOfOrNull { hash ->
+                    contextMap[hash]?.takeIf { it.isNotEmpty() }
+                }?.asSequence() ?: emptySequence()
         } else {
             lineMap.subMap(prefix, true, prefix + '\uffff', true)
                 .values
@@ -89,19 +111,6 @@ class LineIndex {
             fileRecordByPath = { fileMap[it] },
             limit = limit,
         )
-    }
-
-    private fun blankLineCandidates(cursorContext: CursorContext): Sequence<IndexedLine> {
-        val allCandidates = fileMap.values.asSequence()
-            .flatMap { it.lines.asSequence() }
-            .toList()
-
-        val exactContextMatches = allCandidates.filter { it.contextHash == cursorContext.contextHash }
-        return if (exactContextMatches.isNotEmpty()) {
-            exactContextMatches.asSequence()
-        } else {
-            allCandidates.asSequence()
-        }
     }
 
     fun getRecords(): List<FileRecord> = fileMap.values.toList()
@@ -123,6 +132,7 @@ class LineIndex {
 
     fun clear() {
         lineMap.clear()
+        contextMap.clear()
         fileMap.clear()
     }
 }

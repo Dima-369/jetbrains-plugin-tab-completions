@@ -12,7 +12,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
 object PersistenceManager {
-    private const val VERSION = 1
+    private const val VERSION = 2
     private val indexFile: Path = Path.of(PathManager.getSystemPath(), "local-line-complete", "index.bin")
 
     fun save(records: List<FileRecord>) {
@@ -30,7 +30,10 @@ object PersistenceManager {
                 for (line in record.lines) {
                     output.writeUTF(line.originalContent)
                     output.writeInt(line.lineNumber)
-                    output.writeLong(line.contextHash)
+                    output.writeInt(line.contextHashes.size)
+                    for (hash in line.contextHashes) {
+                        output.writeLong(hash)
+                    }
                 }
             }
         }
@@ -51,13 +54,16 @@ object PersistenceManager {
                 val sizeBytes = input.readLong()
                 val lines = List(input.readInt()) {
                     val originalContent = input.readUTF()
+                    val lineNumber = input.readInt()
+                    val hashCount = input.readInt()
+                    val contextHashes = List(hashCount) { input.readLong() }
                     IndexedLine(
                         normalizedContent = originalContent.trim(),
                         originalContent = originalContent,
                         leadingWhitespace = originalContent.takeWhile { ch -> ch == ' ' || ch == '\t' },
                         sourceFilePath = absolutePath,
-                        lineNumber = input.readInt(),
-                        contextHash = input.readLong(),
+                        lineNumber = lineNumber,
+                        contextHashes = contextHashes,
                     )
                 }
                 FileRecord(absolutePath, extension, lastIndexedTimestamp, lines, sizeBytes)

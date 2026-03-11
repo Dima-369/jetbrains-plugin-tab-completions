@@ -48,13 +48,14 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             if (!allowBlankLineCompletion && normalizedPrefix.length < settings.minPrefixLength) return@readAction null
 
             val allLines = document.text.split('\n').map { it.removeSuffix("\r") }
+            val hashes = ContextHash.forLineGraduated(allLines, lineIndex)
             CursorContext(
                 normalizedPrefix = normalizedPrefix,
                 leadingWhitespace = prefixText.takeWhile { it == ' ' || it == '\t' },
                 fileExtension = file.extension.orEmpty(),
                 filePath = file.path,
                 projectBasePath = request.editor.project?.basePath,
-                contextHash = ContextHash.forLine(allLines, lineIndex),
+                contextHashes = hashes,
                 lineNumber = lineIndex + 1,
                 rawPrefixText = prefixText,
                 rawSuffixText = suffixText,
