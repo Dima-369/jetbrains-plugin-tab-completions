@@ -90,6 +90,7 @@ class LineIndexService {
 
     fun indexFile(path: String, content: String, extension: String) {
         ensureLoadedInBackground()
+        dirtyDocumentPaths.remove(path)
         val settings = LocalCompleteSettings.getInstance()
         val sizeBytes = content.length.toLong()
 

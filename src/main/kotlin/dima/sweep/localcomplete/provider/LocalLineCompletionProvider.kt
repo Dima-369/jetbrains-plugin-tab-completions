@@ -75,14 +75,15 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
     }
 
     override suspend fun getSuggestionDebounced(request: InlineCompletionRequest): InlineCompletionSuggestion {
-        val snapshot = readAction {
+        val result = readAction {
             val document = request.document
+            val fullText = document.text
             val offset = request.endOffset
             val file = FileDocumentManager.getInstance().getFile(document) ?: return@readAction null
             val lineIndex = document.getLineNumber(offset)
             val lineStart = document.getLineStartOffset(lineIndex)
             val lineEnd = document.getLineEndOffset(lineIndex)
-            val lineText = document.text.substring(lineStart, lineEnd)
+            val lineText = fullText.substring(lineStart, lineEnd)
             val caretColumn = offset - lineStart
 
             val prefixText = lineText.substring(0, caretColumn)
@@ -92,9 +93,10 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             val allowBlankLineCompletion = normalizedPrefix.isEmpty() && lineText.isBlank()
             if (!allowBlankLineCompletion && normalizedPrefix.length < settings.minPrefixLength) return@readAction null
 
-            val allLines = document.text.split('\n').map { it.removeSuffix("\r") }
+            val allLines = fullText.split('\n').map { it.removeSuffix("\r") }
             val hashes = ContextHash.forLineGraduated(allLines, lineIndex)
-            CursorContext(
+            Pair(
+                CursorContext(
                 normalizedPrefix = normalizedPrefix,
                 leadingWhitespace = prefixText.takeWhile { it == ' ' || it == '\t' },
                 fileExtension = file.extension.orEmpty(),
@@ -104,16 +106,21 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 lineNumber = lineIndex + 1,
                 rawPrefixText = prefixText,
                 rawSuffixText = suffixText,
+                ),
+                fullText,
             )
         } ?: return InlineCompletionSuggestion.Empty
 
-        val result = LineIndexService.getInstance()
+        val (snapshot, documentText) = result
+
+        LineIndexService.getInstance().indexFile(snapshot.filePath, documentText, snapshot.fileExtension)
+
+        val completionText = LineIndexService.getInstance()
             .query(snapshot.normalizedPrefix, snapshot)
             .firstNotNullOfOrNull { rankedCompletion ->
                 buildCompletionText(rankedCompletion.indexedLine, snapshot)
                     ?.takeIf { it.isNotEmpty() }
             } ?: return InlineCompletionSuggestion.Empty
-        val completionText = result
         if (completionText.isBlank()) return InlineCompletionSuggestion.Empty
 
         return InlineCompletionSingleSuggestion.build {
