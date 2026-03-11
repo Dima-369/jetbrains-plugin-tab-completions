@@ -1,0 +1,64 @@
+package dima.sweep.localcomplete.service
+
+import com.intellij.openapi.application.PathManager
+import dima.sweep.localcomplete.model.FileRecord
+import dima.sweep.localcomplete.model.IndexedLine
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.nio.file.Files
+import java.nio.file.Path
+
+object PersistenceManager {
+    private const val VERSION = 1
+    private val indexFile: Path = Path.of(PathManager.getSystemPath(), "local-line-complete", "index.bin")
+
+    fun save(records: List<FileRecord>) {
+        Files.createDirectories(indexFile.parent)
+        DataOutputStream(BufferedOutputStream(Files.newOutputStream(indexFile))).use { output ->
+            output.writeInt(VERSION)
+            output.writeInt(records.size)
+            for (record in records) {
+                output.writeUTF(record.absolutePath)
+                output.writeUTF(record.extension)
+                output.writeLong(record.lastIndexedTimestamp)
+                output.writeLong(record.sizeBytes)
+                output.writeInt(record.lines.size)
+                for (line in record.lines) {
+                    output.writeUTF(line.originalContent)
+                    output.writeInt(line.lineNumber)
+                    output.writeLong(line.contextHash)
+                }
+            }
+        }
+    }
+
+    fun load(): List<FileRecord> {
+        if (!Files.exists(indexFile)) return emptyList()
+
+        DataInputStream(BufferedInputStream(Files.newInputStream(indexFile))).use { input ->
+            val version = input.readInt()
+            if (version != VERSION) return emptyList()
+
+            return List(input.readInt()) {
+                val absolutePath = input.readUTF()
+                val extension = input.readUTF()
+                val lastIndexedTimestamp = input.readLong()
+                val sizeBytes = input.readLong()
+                val lines = List(input.readInt()) {
+                    val originalContent = input.readUTF()
+                    IndexedLine(
+                        normalizedContent = originalContent.trimStart(),
+                        originalContent = originalContent,
+                        leadingWhitespace = originalContent.takeWhile { ch -> ch == ' ' || ch == '\t' },
+                        sourceFilePath = absolutePath,
+                        lineNumber = input.readInt(),
+                        contextHash = input.readLong(),
+                    )
+                }
+                FileRecord(absolutePath, extension, lastIndexedTimestamp, lines, sizeBytes)
+            }
+        }
+    }
+}

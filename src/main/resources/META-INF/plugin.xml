@@ -33,10 +33,34 @@
         <!-- <inline.completion.provider
             id="dima.sweep.GenericCompletionProvider"
             implementation="dima.sweep.GenericCompletionProvider"/> -->
-        <inline.completion.provider
+        <!-- <inline.completion.provider
             id="dima.sweep.FimCompletionProvider"
-            implementation="dima.sweep.FimCompletionProvider"/>
+            implementation="dima.sweep.FimCompletionProvider"/> -->
+        <inline.completion.provider
+            id="dima.sweep.localcomplete.LocalLineCompletionProvider"
+            implementation="dima.sweep.localcomplete.provider.LocalLineCompletionProvider"/>
+        <postStartupActivity
+            implementation="dima.sweep.localcomplete.startup.LocalCompleteStartupActivity"/>
+        <fileDocumentManagerListener
+            implementation="dima.sweep.localcomplete.listener.FileSaveListener"/>
+        <applicationConfigurable
+            parentId="tools"
+            instance="dima.sweep.localcomplete.settings.LocalCompleteConfigurable"
+            id="dima.sweep.localcomplete.settings"
+            displayName="Local Line Complete"/>
     </extensions>
+
+    <applicationListeners>
+        <listener class="dima.sweep.localcomplete.listener.FileDeleteListener"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+        <listener class="dima.sweep.localcomplete.listener.LocalCompleteShutdownListener"
+                  topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
+
+    <projectListeners>
+        <listener class="dima.sweep.localcomplete.listener.FileOpenListener"
+                  topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    </projectListeners>
 
 <!--
     <actions>
