@@ -13,9 +13,9 @@ import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionSin
 import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionSuggestion
 import com.intellij.ide.DataManager
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.actionSystem.IdeActions
-import com.intellij.openapi.editor.actionSystem.CaretSpecificDataContext
 import com.intellij.openapi.editor.actionSystem.EditorActionManager
 import dima.sweep.localcomplete.LocalCompleteKeys
 import dima.sweep.localcomplete.index.ContextHash
@@ -27,6 +27,8 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
+    private val logger = Logger.getInstance(LocalLineCompletionProvider::class.java)
+
     override val id = InlineCompletionProviderID("dima.sweep.localcomplete.LocalLineCompletionProvider")
 
     override val insertHandler: InlineCompletionInsertHandler = object : DefaultInlineCompletionInsertHandler() {
@@ -45,12 +47,13 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 if (offset != document.getLineEndOffset(lineNumber)) return
 
                 val caret = editor.caretModel.currentCaret
-                val dataContext = CaretSpecificDataContext.create(
-                    DataManager.getInstance().getDataContext(editor.contentComponent),
-                    caret,
-                )
-                EditorActionManager.getInstance().getActionHandler(IdeActions.ACTION_EDITOR_ENTER)
-                    .execute(editor, caret, dataContext)
+                val dataContext = DataManager.getInstance().getDataContext(editor.contentComponent)
+                runCatching {
+                    EditorActionManager.getInstance().getActionHandler(IdeActions.ACTION_EDITOR_ENTER)
+                        .execute(editor, caret, dataContext)
+                }.onFailure {
+                    logger.warn("Failed to move caret to next line after inline completion insertion", it)
+                }
             } finally {
                 environment.editor.putUserData(LocalCompleteKeys.TAB_ACCEPT_IN_PROGRESS, null)
             }
