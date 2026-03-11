@@ -1,14 +1,22 @@
 package dima.sweep.localcomplete.service
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.editor.event.DocumentListener
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.util.concurrency.AppExecutorUtil
 import dima.sweep.localcomplete.index.LineIndex
 import dima.sweep.localcomplete.model.CursorContext
 import dima.sweep.localcomplete.model.IndexStats
 import dima.sweep.localcomplete.model.RankedCompletion
 import dima.sweep.localcomplete.settings.LocalCompleteSettings
+import java.util.ArrayList
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -23,15 +31,32 @@ class LineIndexService {
     private val dirty = AtomicBoolean(false)
     private val loadStarted = AtomicBoolean(false)
     private val loading = AtomicBoolean(false)
+    private val dirtyDocumentPaths = ConcurrentHashMap.newKeySet<String>()
+    private val documentListenerRegistered = AtomicBoolean(false)
 
     init {
         val scheduler = AppExecutorUtil.getAppScheduledExecutorService()
         scheduler.scheduleWithFixedDelay({ flushNow() }, 10, 10, TimeUnit.SECONDS)
         scheduler.scheduleWithFixedDelay({ evictIfNeeded() }, 10, 10, TimeUnit.SECONDS)
+        scheduler.scheduleWithFixedDelay({ reindexDirtyDocuments() }, 2, 2, TimeUnit.SECONDS)
     }
 
     companion object {
         fun getInstance(): LineIndexService = service()
+    }
+
+    fun registerDocumentListener() {
+        if (!documentListenerRegistered.compareAndSet(false, true)) return
+
+        EditorFactory.getInstance().eventMulticaster.addDocumentListener(
+            object : DocumentListener {
+                override fun documentChanged(event: DocumentEvent) {
+                    val file = FileDocumentManager.getInstance().getFile(event.document) ?: return
+                    dirtyDocumentPaths.add(file.path)
+                }
+            },
+            ApplicationManager.getApplication(),
+        )
     }
 
     fun ensureLoadedInBackground() {
@@ -109,6 +134,29 @@ class LineIndexService {
         } catch (t: Throwable) {
             dirty.set(true)
             logger.warn("Failed to persist local line completion index", t)
+        }
+    }
+
+    private fun reindexDirtyDocuments() {
+        if (dirtyDocumentPaths.isEmpty()) return
+
+        val paths = ArrayList(dirtyDocumentPaths)
+        paths.forEach(dirtyDocumentPaths::remove)
+
+        val fileData = ApplicationManager.getApplication().runReadAction<List<Triple<String, String, String>>> {
+            paths.mapNotNull { path ->
+                val virtualFile = LocalFileSystem.getInstance().findFileByPath(path) ?: return@mapNotNull null
+                val document = FileDocumentManager.getInstance().getDocument(virtualFile) ?: return@mapNotNull null
+                Triple(path, document.text, virtualFile.extension.orEmpty())
+            }
+        }
+
+        fileData.forEach { (path, text, extension) ->
+            try {
+                indexFile(path, text, extension)
+            } catch (t: Throwable) {
+                logger.warn("Failed to reindex dirty document: $path", t)
+            }
         }
     }
 

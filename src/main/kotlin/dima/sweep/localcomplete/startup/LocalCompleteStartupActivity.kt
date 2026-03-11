@@ -6,6 +6,8 @@ import dima.sweep.localcomplete.service.LineIndexService
 
 class LocalCompleteStartupActivity : StartupActivity.DumbAware {
     override fun runActivity(project: Project) {
-        LineIndexService.getInstance().ensureLoadedInBackground()
+        val service = LineIndexService.getInstance()
+        service.ensureLoadedInBackground()
+        service.registerDocumentListener()
     }
 }

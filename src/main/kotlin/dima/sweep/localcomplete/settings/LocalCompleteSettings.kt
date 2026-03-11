@@ -14,7 +14,7 @@ class LocalCompleteSettings : SerializablePersistentStateComponent<LocalComplete
         val skipLongerColumnLines: Int = 300,
         val maxFileSizeBytes: Long = 1_000_000,
         val debounceMs: Int = 100,
-        val minPrefixLength: Int = 2,
+        val minPrefixLength: Int = 1,
         val enabled: Boolean = true,
     )
 
