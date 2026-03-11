@@ -43,6 +43,8 @@
             implementation="dima.sweep.localcomplete.startup.LocalCompleteStartupActivity"/>
         <fileDocumentManagerListener
             implementation="dima.sweep.localcomplete.listener.FileSaveListener"/>
+        <applicationService
+            serviceImplementation="dima.sweep.localcomplete.settings.LocalCompleteSettings"/>
         <applicationConfigurable
             parentId="tools"
             instance="dima.sweep.localcomplete.settings.LocalCompleteConfigurable"
