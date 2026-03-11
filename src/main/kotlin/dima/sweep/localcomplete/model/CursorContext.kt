@@ -9,4 +9,5 @@ data class CursorContext(
     val contextHash: Long,
     val lineNumber: Int,
     val rawPrefixText: String,
+    val rawSuffixText: String,
 )

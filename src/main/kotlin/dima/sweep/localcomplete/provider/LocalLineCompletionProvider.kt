@@ -39,9 +39,9 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             val lineEnd = document.getLineEndOffset(lineIndex)
             val lineText = document.text.substring(lineStart, lineEnd)
             val caretColumn = offset - lineStart
-            if (caretColumn != lineText.trimEnd().length) return@readAction null
 
             val prefixText = lineText.substring(0, caretColumn)
+            val suffixText = lineText.substring(caretColumn)
             val normalizedPrefix = prefixText.trimStart()
             val settings = LocalCompleteSettings.getInstance()
             if (normalizedPrefix.length < settings.minPrefixLength) return@readAction null
@@ -56,12 +56,17 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 contextHash = ContextHash.forLine(allLines, lineIndex),
                 lineNumber = lineIndex + 1,
                 rawPrefixText = prefixText,
+                rawSuffixText = suffixText,
             )
         } ?: return InlineCompletionSuggestion.Empty
 
-        val result = LineIndexService.getInstance().query(snapshot.normalizedPrefix, snapshot).firstOrNull()
-            ?: return InlineCompletionSuggestion.Empty
-        val completionText = buildCompletionText(result.indexedLine, snapshot)
+        val result = LineIndexService.getInstance()
+            .query(snapshot.normalizedPrefix, snapshot)
+            .firstNotNullOfOrNull { rankedCompletion ->
+                buildCompletionText(rankedCompletion.indexedLine, snapshot)
+                    ?.takeIf { it.isNotEmpty() }
+            } ?: return InlineCompletionSuggestion.Empty
+        val completionText = result
         if (completionText.isBlank()) return InlineCompletionSuggestion.Empty
 
         return InlineCompletionSingleSuggestion.build {
@@ -69,9 +74,16 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
         }
     }
 
-    private fun buildCompletionText(indexedLine: IndexedLine, context: CursorContext): String {
+    private fun buildCompletionText(indexedLine: IndexedLine, context: CursorContext): String? {
         val reindentedLine = context.leadingWhitespace + indexedLine.originalContent.trimStart()
-        if (!reindentedLine.startsWith(context.rawPrefixText)) return ""
-        return reindentedLine.removePrefix(context.rawPrefixText)
+        if (!reindentedLine.startsWith(context.rawPrefixText)) return null
+
+        val remaining = reindentedLine.removePrefix(context.rawPrefixText)
+        if (context.rawSuffixText.isEmpty()) {
+            return remaining
+        }
+
+        if (!remaining.endsWith(context.rawSuffixText)) return null
+        return remaining.removeSuffix(context.rawSuffixText)
     }
 }
