@@ -1,5 +1,6 @@
 package dima.sweep.localcomplete.ranking
 
+import dima.sweep.localcomplete.index.LinePrefixMatcher
 import dima.sweep.localcomplete.model.CursorContext
 import dima.sweep.localcomplete.model.FileRecord
 import dima.sweep.localcomplete.model.IndexedLine
@@ -7,7 +8,6 @@ import dima.sweep.localcomplete.model.RankedCompletion
 import dima.sweep.localcomplete.index.LineFilter
 import kotlin.math.abs
 import kotlin.math.max
-import kotlin.math.min
 
 object CompletionRanker {
     fun rank(
@@ -61,21 +61,39 @@ object CompletionRanker {
             else -> (fileRecord.lastIndexedTimestamp - oldest).toDouble() / max(1L, newest - oldest).toDouble()
         }
         val proximity = proximity(candidate, cursorContext)
-        val prefixRatio = cursorContext.normalizedPrefix.length.toDouble() /
-            max(1, candidate.normalizedContent.length).toDouble()
-        val freqScore = 1.0 - (1.0 / frequency)
+        val normalizedPrefixLength = LinePrefixMatcher.normalizeForLookup(cursorContext.normalizedPrefix).length
+        val normalizedCandidateLength = max(1, LinePrefixMatcher.normalizeForLookup(candidate.normalizedContent).length)
+        val prefixRatio = normalizedPrefixLength.toDouble() / normalizedCandidateLength.toDouble()
+        val exactCaseMatch = exactCaseMatch(candidate, cursorContext)
+        val freqScore = frequencyScore(frequency)
         val contentQuality = contentQuality(candidate.normalizedContent)
-        val lengthValue = min(candidate.normalizedContent.length, 80).toDouble() / 80.0
         val bracketPenalty = LineFilter.bracketBalancePenalty(candidate.normalizedContent, cursorContext.rawSuffixText)
 
-        return ((40.0 * contextSimilarity) +
-            (15.0 * extensionMatch) +
-            (15.0 * freqScore) +
+        return ((30.0 * contextSimilarity) +
+            (25.0 * prefixRatio) +
+            (15.0 * exactCaseMatch) +
             (10.0 * recency) +
-            (8.0 * proximity) +
+            (10.0 * proximity) +
             (5.0 * contentQuality) +
-            (4.0 * lengthValue) +
-            (3.0 * prefixRatio)) * bracketPenalty
+            (5.0 * freqScore) +
+            (3.0 * extensionMatch)) * bracketPenalty
+    }
+
+    private fun exactCaseMatch(candidate: IndexedLine, cursorContext: CursorContext): Double {
+        val trimmedPrefix = cursorContext.rawPrefixText.trimStart()
+        if (trimmedPrefix.isEmpty()) return 0.0
+        return if (candidate.originalContent.trimStart().startsWith(trimmedPrefix)) 1.0 else 0.0
+    }
+
+    private fun frequencyScore(frequency: Int): Double {
+        return when {
+            frequency <= 0 -> 0.0
+            frequency == 1 -> 0.65
+            frequency <= 5 -> 1.0
+            frequency <= 10 -> 0.7
+            frequency <= 25 -> 0.4
+            else -> 0.15
+        }
     }
 
     private fun contentQuality(content: String): Double {
