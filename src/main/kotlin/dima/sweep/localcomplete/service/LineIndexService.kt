@@ -5,7 +5,6 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.EditorFactory
-import com.intellij.openapi.editor.event.CaretListener
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -35,7 +34,6 @@ class LineIndexService {
     private val loading = AtomicBoolean(false)
     private val dirtyDocumentPaths = ConcurrentHashMap.newKeySet<String>()
     private val documentListenerRegistered = AtomicBoolean(false)
-    private val caretListenerRegistered = AtomicBoolean(false)
     private val sessionLineCache = SessionLineCache()
 
     private data class DirtyFileData(
@@ -66,15 +64,6 @@ class LineIndexService {
                     dirtyDocumentPaths.add(file.path)
                 }
             },
-            ApplicationManager.getApplication(),
-        )
-    }
-
-    fun registerCaretListener(listener: CaretListener) {
-        if (!caretListenerRegistered.compareAndSet(false, true)) return
-
-        EditorFactory.getInstance().eventMulticaster.addCaretListener(
-            listener,
             ApplicationManager.getApplication(),
         )
     }
