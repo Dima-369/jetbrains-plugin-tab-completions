@@ -120,7 +120,7 @@ class LineIndex {
         sessionScoreWeight: Double = 25.0,
     ): List<RankedCompletion> {
         val normalizedLookupPrefix = LinePrefixMatcher.normalizeForLookup(prefix)
-        val candidates = if (normalizedLookupPrefix.isBlank()) {
+        val baseCandidates = if (normalizedLookupPrefix.isBlank()) {
             val prefixCandidates = queryByHashes(cursorContext.prefixContextHashes, prefixContextMap)
             val prefixKeys = prefixCandidates
                 .map { indexedLineKey(it) }
@@ -152,14 +152,23 @@ class LineIndex {
                     cursorContext.nextNonBlankLineNormalized.isNotEmpty() &&
                     LinePrefixMatcher.normalizeForLookup(it.normalizedContent) == cursorContext.nextNonBlankLineNormalized
             }
-            .filterNot {
-                cursorContext.nearbyNormalizedLines.contains(
-                    LinePrefixMatcher.normalizeForLookup(it.normalizedContent)
-                )
-            }
+            .toList()
+
+        // Prefer non-nearby candidates, but fall back to nearby ones if nothing else matches
+        val nonNearbyCandidates = baseCandidates.filterNot {
+            cursorContext.nearbyNormalizedLines.contains(
+                LinePrefixMatcher.normalizeForLookup(it.normalizedContent)
+            )
+        }
+
+        val candidatesToRank = if (nonNearbyCandidates.isNotEmpty()) {
+            nonNearbyCandidates.asSequence()
+        } else {
+            baseCandidates.asSequence()
+        }
 
         return CompletionRanker.rank(
-            candidates = candidates,
+            candidates = candidatesToRank,
             cursorContext = cursorContext,
             fileRecords = fileMap.values,
             fileRecordByPath = { fileMap[it] },
