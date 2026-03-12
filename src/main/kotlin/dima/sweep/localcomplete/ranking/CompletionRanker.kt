@@ -4,6 +4,7 @@ import dima.sweep.localcomplete.model.CursorContext
 import dima.sweep.localcomplete.model.FileRecord
 import dima.sweep.localcomplete.model.IndexedLine
 import dima.sweep.localcomplete.model.RankedCompletion
+import dima.sweep.localcomplete.index.LineFilter
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -65,15 +66,16 @@ object CompletionRanker {
         val freqScore = 1.0 - (1.0 / frequency)
         val contentQuality = contentQuality(candidate.normalizedContent)
         val lengthValue = min(candidate.normalizedContent.length, 80).toDouble() / 80.0
+        val bracketPenalty = LineFilter.bracketBalancePenalty(candidate.normalizedContent, cursorContext.rawSuffixText)
 
-        return (40.0 * contextSimilarity) +
+        return ((40.0 * contextSimilarity) +
             (15.0 * extensionMatch) +
             (15.0 * freqScore) +
             (10.0 * recency) +
             (8.0 * proximity) +
             (5.0 * contentQuality) +
             (4.0 * lengthValue) +
-            (3.0 * prefixRatio)
+            (3.0 * prefixRatio)) * bracketPenalty
     }
 
     private fun contentQuality(content: String): Double {
