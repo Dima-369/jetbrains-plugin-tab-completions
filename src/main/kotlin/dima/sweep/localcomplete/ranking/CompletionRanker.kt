@@ -72,7 +72,7 @@ object CompletionRanker {
         val exactCaseMatch = exactCaseMatch(candidate, cursorContext)
         val freqScore = frequencyScore(frequency)
         val contentQuality = contentQuality(candidate.normalizedContent)
-        val bracketPenalty = LineFilter.bracketBalancePenalty(candidate.normalizedContent, cursorContext.rawSuffixText)
+        val bracketPenalty = bracketBalanceWithPrefix(candidate, cursorContext)
         val lengthPenalty = lengthPenalty(candidate.normalizedContent.length)
 
         return ((30.0 * contextSimilarity) +
@@ -112,6 +112,17 @@ object CompletionRanker {
             lineLength <= 150 -> 0.55
             else -> 0.40
         }
+    }
+
+    private fun bracketBalanceWithPrefix(candidate: IndexedLine, cursorContext: CursorContext): Double {
+        val prefixMatchEnd = LinePrefixMatcher.findMatchEnd(candidate.normalizedContent, cursorContext.rawPrefixText)
+        val completionPart = if (prefixMatchEnd != null) {
+            candidate.normalizedContent.substring(prefixMatchEnd)
+        } else {
+            candidate.normalizedContent
+        }
+        val combinedText = cursorContext.rawPrefixText + completionPart
+        return LineFilter.bracketBalancePenalty(combinedText, cursorContext.rawSuffixText)
     }
 
     private fun exactCaseMatch(candidate: IndexedLine, cursorContext: CursorContext): Double {
