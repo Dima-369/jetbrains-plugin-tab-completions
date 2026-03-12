@@ -1,22 +1,10 @@
-# TODO
+# AI Slop below
 
-- when cursor is at | below, there is never a completion shown?
-
-```php
-/**
- *|
- */
-class ...
-```
-
-- when I edit in one tab, say I add a line which does not exist yet in the db, assume `declare(strict_types=1);` and I go to another tab and enter that in,
-it is not suggested?
-
-# Local Sweep — JetBrains FIM Plugin
+## Local Sweep — JetBrains FIM Plugin
 
 A JetBrains plugin providing inline code completions via a local FIM (Fill-in-the-Middle) server.
 
-## Model Choice
+### Model Choice
 
 This plugin uses the Qwen 2.5 Coder FIM format (`<|fim_prefix|>...<|fim_suffix|>...<|fim_middle|>`).
 
@@ -36,7 +24,7 @@ The base model also supports **repo-level FIM** with cross-file context using sp
 
 This allows prepending contents of other open files before the FIM block to improve completion quality. The instruct model was not trained with this repo-level format.
 
-## Architecture
+### Architecture
 
 - **FimClient** — Sends FIM requests to a local llama.cpp server at `http://localhost:8095/completion`
 - **FimCompletionProvider** — JetBrains inline completion provider; sends up to 3000 chars before and 1500 chars after the cursor
