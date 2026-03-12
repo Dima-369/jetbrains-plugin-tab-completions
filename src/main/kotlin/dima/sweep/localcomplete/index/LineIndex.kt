@@ -127,6 +127,11 @@ class LineIndex {
                     cursorContext.nextNonBlankLineNormalized.isNotEmpty() &&
                     LinePrefixMatcher.normalizeForLookup(it.normalizedContent) == cursorContext.nextNonBlankLineNormalized
             }
+            .filterNot {
+                cursorContext.nearbyNormalizedLines.contains(
+                    LinePrefixMatcher.normalizeForLookup(it.normalizedContent)
+                )
+            }
 
         return CompletionRanker.rank(
             candidates = candidates,

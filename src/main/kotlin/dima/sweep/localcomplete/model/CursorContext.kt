@@ -13,6 +13,7 @@ data class CursorContext(
     val rawPrefixText: String,
     val rawSuffixText: String,
     val nextNonBlankLineNormalized: String = "",
+    val nearbyNormalizedLines: Set<String> = emptySet(),
 ) {
     val contextHash: Long
         get() = prefixContextHashes.firstOrNull() ?: 0L

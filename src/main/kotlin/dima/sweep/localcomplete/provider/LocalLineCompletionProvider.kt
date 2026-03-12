@@ -117,6 +117,7 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             } else {
                 ""
             }
+            val nearbyNormalizedLines = collectNearbyNormalizedLines(allLines, lineIndex)
             SuggestionSnapshot(
                 cursorContext = CursorContext(
                 normalizedPrefix = normalizedPrefix,
@@ -131,6 +132,7 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 rawPrefixText = prefixText,
                 rawSuffixText = suffixText,
                 nextNonBlankLineNormalized = nextNonBlankLineNormalized,
+                nearbyNormalizedLines = nearbyNormalizedLines,
                 ),
                 documentText = fullText,
                 activeLineNumbers = activeLineNumbers,
@@ -177,6 +179,29 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             }
         }
         return ""
+    }
+
+    private fun collectNearbyNormalizedLines(allLines: List<String>, lineIndex: Int): Set<String> {
+        val result = mutableSetOf<String>()
+        val windowSize = 3
+
+        for (i in (lineIndex - windowSize) until lineIndex) {
+            if (i >= 0) {
+                val normalized = LinePrefixMatcher.normalizeForLookup(allLines[i])
+                if (normalized.isNotEmpty()) {
+                    result.add(normalized)
+                }
+            }
+        }
+
+        for (i in (lineIndex + 1) until minOf(lineIndex + 1 + windowSize, allLines.size)) {
+            val normalized = LinePrefixMatcher.normalizeForLookup(allLines[i])
+            if (normalized.isNotEmpty()) {
+                result.add(normalized)
+            }
+        }
+
+        return result
     }
 
     private fun detectCompletionContext(
