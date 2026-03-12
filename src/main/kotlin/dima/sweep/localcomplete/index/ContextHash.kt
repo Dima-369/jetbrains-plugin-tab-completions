@@ -1,7 +1,6 @@
 package dima.sweep.localcomplete.index
 
 object ContextHash {
-    private val numberStringRegex = Regex("\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|\\b\\d+\\b")
     private const val prefixSalt = 0x13579BDF2468ACEL
     private const val suffixSalt = 0x2468ACE13579BDFL
 
@@ -55,7 +54,68 @@ object ContextHash {
     }
 
     private fun normalizeContextLine(line: String): String {
-        return line.replace(numberStringRegex, "#").trim().lowercase()
+        return maskLiteralsAndNumbers(line).trim().lowercase()
+    }
+
+    private fun maskLiteralsAndNumbers(line: String): String {
+        val masked = StringBuilder(line.length)
+        var index = 0
+        while (index < line.length) {
+            val character = line[index]
+            when {
+                character == '"' || character == '\'' -> {
+                    masked.append('#')
+                    index = skipQuotedLiteral(line, index)
+                }
+                character.isDigit() -> {
+                    val endIndex = skipDigits(line, index)
+                    val previous = line.getOrNull(index - 1)
+                    val next = line.getOrNull(endIndex)
+                    if (!previous.isWordCharacter() && !next.isWordCharacter()) {
+                        masked.append('#')
+                        index = endIndex
+                    } else {
+                        masked.append(character)
+                        index++
+                    }
+                }
+                else -> {
+                    masked.append(character)
+                    index++
+                }
+            }
+        }
+        return masked.toString()
+    }
+
+    private fun skipQuotedLiteral(line: String, startIndex: Int): Int {
+        val quote = line[startIndex]
+        var index = startIndex + 1
+        var escaped = false
+        while (index < line.length) {
+            val character = line[index]
+            if (escaped) {
+                escaped = false
+            } else if (character == '\\') {
+                escaped = true
+            } else if (character == quote) {
+                return index + 1
+            }
+            index++
+        }
+        return line.length
+    }
+
+    private fun skipDigits(line: String, startIndex: Int): Int {
+        var index = startIndex
+        while (index < line.length && line[index].isDigit()) {
+            index++
+        }
+        return index
+    }
+
+    private fun Char?.isWordCharacter(): Boolean {
+        return this != null && (isLetterOrDigit() || this == '_')
     }
 
     private fun hash(lines: List<String>, salt: Long): Long {

@@ -26,6 +26,22 @@ class ContextHashTest {
     }
 
     @Test
+    fun `hash handles escaped strings and keeps identifier digits structural`() {
+        val first = listOf(
+            "val path = \"a\\\"b\"",
+            "val user1 = item42",
+            "println('x')",
+        )
+        val second = listOf(
+            "val path = \"c\\\"d\"",
+            "val user1 = item42",
+            "println('y')",
+        )
+
+        assertEquals(ContextHash.forLine(first, 2), ContextHash.forLine(second, 2))
+    }
+
+    @Test
     fun `hash still changes when structure changes`() {
         val first = listOf(
             "if (enabled) {",
