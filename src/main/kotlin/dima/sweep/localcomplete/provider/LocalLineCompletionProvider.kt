@@ -35,6 +35,12 @@ import kotlin.time.Duration.Companion.milliseconds
 class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
     private val logger = Logger.getInstance(LocalLineCompletionProvider::class.java)
 
+    private data class SuggestionSnapshot(
+        val cursorContext: CursorContext,
+        val documentText: String,
+        val activeLineNumbers: Set<Int>,
+    )
+
     override val id = InlineCompletionProviderID("dima.sweep.localcomplete.LocalLineCompletionProvider")
 
     override val insertHandler: InlineCompletionInsertHandler = object : DefaultInlineCompletionInsertHandler() {
@@ -99,12 +105,15 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             val settings = LocalCompleteSettings.getInstance()
             val allowBlankLineCompletion = normalizedPrefix.isEmpty() && lineText.isBlank()
             if (!allowBlankLineCompletion && normalizedPrefix.length < settings.minPrefixLength) return@readAction null
+            val activeLineNumbers = request.editor.caretModel.allCarets
+                .map { caret -> document.getLineNumber(caret.offset) + 1 }
+                .toSet()
 
             val allLines = fullText.split('\n').map { it.removeSuffix("\r") }
             val prefixHashes = ContextHash.prefixHashesForLine(allLines, lineIndex)
             val suffixHashes = ContextHash.suffixHashesForLine(allLines, lineIndex)
-            Pair(
-                CursorContext(
+            SuggestionSnapshot(
+                cursorContext = CursorContext(
                 normalizedPrefix = normalizedPrefix,
                 leadingWhitespace = prefixText.takeWhile { it == ' ' || it == '\t' },
                 completionContextKind = completionContextKind,
@@ -117,24 +126,26 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 rawPrefixText = prefixText,
                 rawSuffixText = suffixText,
                 ),
-                fullText,
+                documentText = fullText,
+                activeLineNumbers = activeLineNumbers,
             )
         } ?: return InlineCompletionSuggestion.Empty
 
-        val (snapshot, documentText) = result
+        val snapshot = result
+        val cursorContext = snapshot.cursorContext
 
         LineIndexService.getInstance().indexFile(
-            snapshot.filePath,
-            documentText,
-            snapshot.fileExtension,
+            cursorContext.filePath,
+            snapshot.documentText,
+            cursorContext.fileExtension,
             trackSessionChanges = true,
-            activeLineNumbers = setOf(snapshot.lineNumber),
+            activeLineNumbers = snapshot.activeLineNumbers,
         )
 
         val completionText = LineIndexService.getInstance()
-            .query(snapshot.normalizedPrefix, snapshot)
+            .query(cursorContext.normalizedPrefix, cursorContext)
             .firstNotNullOfOrNull { rankedCompletion ->
-                buildCompletionText(rankedCompletion.indexedLine, snapshot)
+                buildCompletionText(rankedCompletion.indexedLine, cursorContext)
                     ?.takeIf { it.isNotEmpty() }
             } ?: return InlineCompletionSuggestion.Empty
         if (completionText.isBlank()) return InlineCompletionSuggestion.Empty
