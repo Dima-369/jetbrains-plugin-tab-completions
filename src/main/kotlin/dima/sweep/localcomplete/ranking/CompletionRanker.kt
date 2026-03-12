@@ -92,18 +92,15 @@ object CompletionRanker {
             return 1.0
         }
 
-        val matchingPrefixHashes = candidate.prefixContextHashes.filter { hash ->
-            hash != 0L && cursorContext.prefixContextHashes.contains(hash)
+        var bestDepthScore = 0.0
+        for ((depth, hash) in cursorContext.prefixContextHashes.withIndex()) {
+            if (hash != 0L && candidate.prefixContextHashes.getOrNull(depth) == hash) {
+                val depthScore = 1.0 - (depth * 0.2)
+                bestDepthScore = maxOf(bestDepthScore, depthScore)
+            }
         }
 
-        if (matchingPrefixHashes.isEmpty()) {
-            return 0.0
-        }
-
-        val maxPossibleMatches = maxOf(candidate.prefixContextHashes.count { it != 0L }, 1)
-        val matchDepth = matchingPrefixHashes.size.toDouble() / maxPossibleMatches.toDouble()
-
-        return 0.3 + 0.2 * matchDepth
+        return bestDepthScore
     }
 
     private fun lengthPenalty(lineLength: Int): Double {
