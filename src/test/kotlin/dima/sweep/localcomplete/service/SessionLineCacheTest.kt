@@ -19,6 +19,23 @@ class SessionLineCacheTest {
         assertEquals(0.0, cache.score(line("val count = 2", 1), now = TimeUnit.MINUTES.toMillis(6)), 0.0)
     }
 
+    @Test
+    fun `evicts oldest entries when over capacity`() {
+        val cache = SessionLineCache(ttlMillis = TimeUnit.MINUTES.toMillis(5), maxEntries = 2)
+
+        cache.remember(line("val a = 1", 1), now = 100L)
+        cache.remember(line("val b = 2", 2), now = 200L)
+        cache.rememberUpdatedLines(
+            currentLines = listOf(line("val c = 3", 3)),
+            previousLines = emptyList(),
+            now = 300L,
+        )
+
+        assertEquals(0.0, cache.score(line("val a = 1", 1), now = 300L), 0.0)
+        assertTrue(cache.score(line("val b = 2", 2), now = 300L) > 0.0)
+        assertTrue(cache.score(line("val c = 3", 3), now = 300L) > 0.0)
+    }
+
     private fun line(content: String, lineNumber: Int): IndexedLine {
         return IndexedLine(content.trim(), content, "", "/tmp/current.kt", lineNumber, listOf(0L))
     }
