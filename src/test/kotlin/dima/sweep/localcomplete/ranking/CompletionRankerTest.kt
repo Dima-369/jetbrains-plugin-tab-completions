@@ -52,6 +52,27 @@ class CompletionRankerTest {
     }
 
     @Test
+    fun `singleton specific lines stay ahead of highly repetitive ones`() {
+        val singleton = candidate("fetchUserData()", "/tmp/singleton.kt", 1)
+        val repetitive = (1..12).map { index ->
+            candidate("fetchUserList()", "/tmp/repetitive$index.kt", 1)
+        }
+        val allCandidates = listOf(singleton) + repetitive
+        val records = recordsFor(*allCandidates.toTypedArray())
+
+        val ranked = CompletionRanker.rank(
+            candidates = allCandidates.asSequence(),
+            cursorContext = context(rawPrefixText = "fetchUser", normalizedPrefix = "fetchUser"),
+            fileRecords = records,
+            fileRecordByPath = { path -> records.firstOrNull { it.absolutePath == path } },
+            sessionScore = { 0.0 },
+            limit = 2,
+        )
+
+        assertEquals("fetchUserData()", ranked.first().indexedLine.originalContent)
+    }
+
+    @Test
     fun `session score can push a recent line to the top`() {
         val recent = candidate("rememberMe()", "/tmp/recent.kt", 1)
         val stale = candidate("rememberYou()", "/tmp/stale.kt", 1)

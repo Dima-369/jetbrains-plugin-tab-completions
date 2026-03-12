@@ -91,7 +91,7 @@ object CompletionRanker {
     private fun frequencyScore(frequency: Int): Double {
         return when {
             frequency <= 0 -> 0.0
-            frequency == 1 -> 0.65
+            frequency == 1 -> 0.9
             frequency <= 5 -> 1.0
             frequency <= 10 -> 0.7
             frequency <= 25 -> 0.4
