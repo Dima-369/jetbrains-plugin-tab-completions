@@ -14,6 +14,7 @@ import com.intellij.util.concurrency.AppExecutorUtil
 import dima.sweep.localcomplete.index.LineIndex
 import dima.sweep.localcomplete.model.CursorContext
 import dima.sweep.localcomplete.model.IndexStats
+import dima.sweep.localcomplete.model.IndexedLine
 import dima.sweep.localcomplete.model.RankedCompletion
 import dima.sweep.localcomplete.settings.LocalCompleteSettings
 import java.util.ArrayList
@@ -138,6 +139,10 @@ class LineIndexService {
         ensureLoadedInBackground()
         if (loading.get() || !LocalCompleteSettings.getInstance().enabled) return emptyList()
         return lock.read { lineIndex.query(prefix, cursorContext, limit, sessionLineCache::score, LocalCompleteSettings.getInstance().sessionScoreWeight.toDouble()) }
+    }
+
+    fun acceptLine(line: IndexedLine) {
+        sessionLineCache.rememberAccepted(line)
     }
 
     fun removeFile(path: String) {

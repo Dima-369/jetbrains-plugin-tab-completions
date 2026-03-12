@@ -35,6 +35,15 @@ import kotlin.time.Duration.Companion.milliseconds
 class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
     private val logger = Logger.getInstance(LocalLineCompletionProvider::class.java)
 
+    @Volatile private var lastSuggestion: StableSuggestion? = null
+
+    private data class StableSuggestion(
+        val filePath: String,
+        val lineNumber: Int,
+        val fullCompletedLine: String,
+        val timestamp: Long,
+    )
+
     private data class SuggestionSnapshot(
         val cursorContext: CursorContext,
         val documentText: String,
@@ -48,14 +57,33 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             try {
                 super.afterInsertion(environment, elements)
 
-                val settings = LocalCompleteSettings.getInstance()
                 val editor = environment.editor
+                val document = editor.document
+                val offset = editor.caretModel.offset
+                val lineNumber = document.getLineNumber(offset)
+                val lineStart = document.getLineStartOffset(lineNumber)
+                val lineEnd = document.getLineEndOffset(lineNumber)
+                val fullLine = document.getText(com.intellij.openapi.util.TextRange(lineStart, lineEnd))
+                val file = FileDocumentManager.getInstance().getFile(document)
+
+                // Record the accepted line for future scoring
+                if (file != null) {
+                    val indexedLine = IndexedLine(
+                        normalizedContent = LinePrefixMatcher.normalizeForLookup(fullLine),
+                        originalContent = fullLine,
+                        leadingWhitespace = fullLine.takeWhile { it == ' ' || it == '\t' },
+                        sourceFilePath = file.path,
+                        lineNumber = lineNumber + 1,
+                        prefixContextHashes = emptyList(),
+                        suffixContextHashes = emptyList(),
+                    )
+                    LineIndexService.getInstance().acceptLine(indexedLine)
+                }
+
+                val settings = LocalCompleteSettings.getInstance()
                 if (!settings.moveCaretDownOnTabAccept) return
                 if (editor.getUserData(LocalCompleteKeys.TAB_ACCEPT_IN_PROGRESS) != true) return
 
-                val offset = editor.caretModel.offset
-                val document = editor.document
-                val lineNumber = document.getLineNumber(offset)
                 if (offset != document.getLineEndOffset(lineNumber)) return
 
                 ApplicationManager.getApplication().invokeLater {
@@ -142,6 +170,24 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
         val snapshot = result
         val cursorContext = snapshot.cursorContext
 
+        // Check if cached suggestion is still valid before re-querying
+        val cached = lastSuggestion
+        if (cached != null &&
+            cached.filePath == cursorContext.filePath &&
+            cached.lineNumber == cursorContext.lineNumber
+        ) {
+            val prefixMatchEnd = LinePrefixMatcher.findMatchEnd(cached.fullCompletedLine, cursorContext.rawPrefixText)
+            if (prefixMatchEnd != null) {
+                val remaining = cached.fullCompletedLine.substring(prefixMatchEnd)
+                val adjusted = LinePrefixMatcher.removeSuffixOverlap(remaining, cursorContext.rawSuffixText)
+                if (adjusted != null && adjusted.isNotEmpty() && !adjusted.isBlank()) {
+                    return InlineCompletionSingleSuggestion.build {
+                        emit(InlineCompletionGrayTextElement(adjusted))
+                    }
+                }
+            }
+        }
+
         LineIndexService.getInstance().indexFile(
             cursorContext.filePath,
             snapshot.documentText,
@@ -157,6 +203,14 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                     ?.takeIf { it.isNotEmpty() }
             } ?: return InlineCompletionSuggestion.Empty
         if (completionText.isBlank()) return InlineCompletionSuggestion.Empty
+
+        // Update cache with the new suggestion
+        lastSuggestion = StableSuggestion(
+            filePath = cursorContext.filePath,
+            lineNumber = cursorContext.lineNumber,
+            fullCompletedLine = cursorContext.rawPrefixText + completionText,
+            timestamp = System.currentTimeMillis(),
+        )
 
         return InlineCompletionSingleSuggestion.build {
             emit(InlineCompletionGrayTextElement(completionText))
