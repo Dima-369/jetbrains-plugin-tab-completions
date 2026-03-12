@@ -165,10 +165,38 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
 
     private fun buildCompletionText(indexedLine: IndexedLine, context: CursorContext): String? {
         val reindentedLine = context.leadingWhitespace + indexedLine.originalContent.trimStart()
-        val prefixMatchEnd = LinePrefixMatcher.findMatchEnd(reindentedLine, context.rawPrefixText) ?: return null
 
-        val remaining = reindentedLine.substring(prefixMatchEnd)
-        return LinePrefixMatcher.removeSuffixOverlap(remaining, context.rawSuffixText)
+        // Try full-line prefix match first (existing logic)
+        val prefixMatchEnd = LinePrefixMatcher.findMatchEnd(reindentedLine, context.rawPrefixText)
+        if (prefixMatchEnd != null) {
+            val remaining = reindentedLine.substring(prefixMatchEnd)
+            return LinePrefixMatcher.removeSuffixOverlap(remaining, context.rawSuffixText)
+        }
+
+        // Mid-line fallback: find where the user's trailing token appears in the candidate
+        return buildMidLineCompletion(reindentedLine, context)
+    }
+
+    private fun buildMidLineCompletion(candidateLine: String, context: CursorContext): String? {
+        // Extract the trailing typed fragment (e.g., "user.getName" from "val x = user.getName")
+        val prefix = context.rawPrefixText.trimEnd()
+        if (prefix.length < 4) return null
+
+        // Try progressively shorter suffixes of what the user typed
+        // to find where it aligns within the candidate line
+        val maxSuffixScan = minOf(prefix.length, 60)
+        for (len in maxSuffixScan downTo 4) {
+            val tail = prefix.substring(prefix.length - len)
+            val matchIndex = candidateLine.indexOf(tail, ignoreCase = true)
+            if (matchIndex >= 0) {
+                val completionStart = matchIndex + tail.length
+                if (completionStart >= candidateLine.length) return null
+                val remaining = candidateLine.substring(completionStart)
+                if (remaining.isBlank()) return null
+                return LinePrefixMatcher.removeSuffixOverlap(remaining, context.rawSuffixText)
+            }
+        }
+        return null
     }
 
     private fun findNextNonBlankLineNormalized(allLines: List<String>, lineIndex: Int): String {
