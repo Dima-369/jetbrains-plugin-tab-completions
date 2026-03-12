@@ -154,21 +154,8 @@ class LineIndex {
             }
             .toList()
 
-        // Prefer non-nearby candidates, but fall back to nearby ones if nothing else matches
-        val nonNearbyCandidates = baseCandidates.filterNot {
-            cursorContext.nearbyNormalizedLines.contains(
-                LinePrefixMatcher.normalizeForLookup(it.normalizedContent)
-            )
-        }
-
-        val candidatesToRank = if (nonNearbyCandidates.isNotEmpty()) {
-            nonNearbyCandidates.asSequence()
-        } else {
-            baseCandidates.asSequence()
-        }
-
         return CompletionRanker.rank(
-            candidates = candidatesToRank,
+            candidates = baseCandidates.asSequence(),
             cursorContext = cursorContext,
             fileRecords = fileMap.values,
             fileRecordByPath = { fileMap[it] },

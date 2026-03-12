@@ -73,6 +73,14 @@ object CompletionRanker {
         val lengthPenalty = lengthPenalty(candidate.normalizedContent.length)
         val indentationMatch = indentationMatch(candidate, cursorContext)
 
+        // Heavily penalize nearby lines only on blank lines or very short prefixes
+        // to prevent suggesting the line you just typed right after pressing Enter.
+        // With longer prefixes, nearby lines are valuable (e.g. repetitive array entries).
+        val isNearby = cursorContext.nearbyNormalizedLines.contains(
+            LinePrefixMatcher.normalizeForLookup(candidate.normalizedContent)
+        )
+        val duplicatePenalty = if (isNearby && normalizedPrefixLength <= 2) 0.1 else 1.0
+
         val (prefixWeight, suffixWeight) = when (cursorContext.completionContextKind) {
             CompletionContextKind.COMMENT -> 15.0 to 25.0
             else -> 30.0 to 10.0
@@ -88,7 +96,7 @@ object CompletionRanker {
             (5.0 * contentQuality) +
             (5.0 * freqScore) +
             (3.0 * extensionMatch) +
-            (8.0 * indentationMatch)) * bracketPenalty * lengthPenalty
+            (8.0 * indentationMatch)) * bracketPenalty * lengthPenalty * duplicatePenalty
     }
 
     private fun contextSimilarityScore(candidate: IndexedLine, cursorContext: CursorContext): Double {

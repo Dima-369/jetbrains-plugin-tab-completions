@@ -9,9 +9,8 @@ enum class CompletionContextKind {
 
     fun allows(line: IndexedLine): Boolean {
         return when (this) {
-            STRING -> false
             COMMENT -> classifyLine(line.originalContent) == COMMENT
-            CODE, UNKNOWN -> classifyLine(line.originalContent) != COMMENT
+            else -> classifyLine(line.originalContent) != COMMENT
         }
     }
 

@@ -22,7 +22,15 @@ class CompletionContextKindTest {
 
         assertTrue(CompletionContextKind.COMMENT.allows(commentLine))
         assertFalse(CompletionContextKind.COMMENT.allows(codeLine))
+    }
+
+    @Test
+    fun `string context allows non-comment lines`() {
+        val commentLine = IndexedLine("// TODO", "// TODO", "", "/tmp/a.kt", 1, emptyList(), emptyList())
+        val codeLine = IndexedLine("val x = 1", "val x = 1", "", "/tmp/a.kt", 2, emptyList(), emptyList())
+
         assertFalse(CompletionContextKind.STRING.allows(commentLine))
+        assertTrue(CompletionContextKind.STRING.allows(codeLine))
     }
 
     @Test

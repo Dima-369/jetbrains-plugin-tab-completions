@@ -120,7 +120,6 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             val offset = request.endOffset
             val file = FileDocumentManager.getInstance().getFile(document) ?: return@readAction null
             val completionContextKind = detectCompletionContext(request, document, offset)
-            if (completionContextKind == CompletionContextKind.STRING) return@readAction null
             val lineIndex = document.getLineNumber(offset)
             val lineStart = document.getLineStartOffset(lineIndex)
             val lineEnd = document.getLineEndOffset(lineIndex)
