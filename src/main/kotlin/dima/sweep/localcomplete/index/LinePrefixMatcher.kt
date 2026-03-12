@@ -42,7 +42,7 @@ object LinePrefixMatcher {
         return suggestionIndex
     }
 
-    fun removeSuffixOverlap(remaining: String, rawSuffixText: String): String {
+    fun removeSuffixOverlap(remaining: String, rawSuffixText: String): String? {
         val trimmedSuffix = rawSuffixText.trimStart()
         if (remaining.isEmpty() || trimmedSuffix.isEmpty()) return remaining
 
@@ -58,6 +58,8 @@ object LinePrefixMatcher {
             }
         }
 
-        return remaining
+        // FIM logic: suffix is present, but the candidate does not merge with it.
+        // Return null so the provider rejects this as a valid inline suggestion.
+        return null
     }
 }
