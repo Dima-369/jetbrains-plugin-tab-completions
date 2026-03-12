@@ -11,7 +11,6 @@ import java.util.LinkedHashMap
 import java.util.TreeMap
 
 class LineIndex {
-    private val lineMap = TreeMap<String, MutableList<IndexedLine>>()
     private val normalizedPrefixMap = TreeMap<String, MutableList<IndexedLine>>()
     private val contextMap = HashMap<Long, MutableList<IndexedLine>>()
     private val fileMap = LinkedHashMap<String, FileRecord>()
@@ -57,7 +56,6 @@ class LineIndex {
     fun loadFileRecord(record: FileRecord) {
         fileMap[record.absolutePath] = record
         record.lines.forEach { line ->
-            lineMap.getOrPut(line.normalizedContent) { mutableListOf() }.add(line)
             normalizedPrefixMap.getOrPut(LinePrefixMatcher.normalizeForLookup(line.normalizedContent)) { mutableListOf() }
                 .add(line)
             for (hash in line.contextHashes) {
@@ -71,14 +69,6 @@ class LineIndex {
     fun removeFile(path: String) {
         val record = fileMap.remove(path) ?: return
         record.lines.forEach { line ->
-            val bucket = lineMap[line.normalizedContent]
-            if (bucket != null) {
-                bucket.removeIf { it.sourceFilePath == path && it.lineNumber == line.lineNumber }
-                if (bucket.isEmpty()) {
-                    lineMap.remove(line.normalizedContent)
-                }
-            }
-
             val normalizedPrefix = LinePrefixMatcher.normalizeForLookup(line.normalizedContent)
             val normalizedBucket = normalizedPrefixMap[normalizedPrefix]
             if (normalizedBucket != null) {
@@ -149,12 +139,11 @@ class LineIndex {
         return IndexStats(
             fileCount = fileMap.size,
             lineCount = fileMap.values.sumOf { it.lines.size },
-            indexSize = lineMap.size,
+            indexSize = normalizedPrefixMap.size,
         )
     }
 
     fun clear() {
-        lineMap.clear()
         normalizedPrefixMap.clear()
         contextMap.clear()
         fileMap.clear()
