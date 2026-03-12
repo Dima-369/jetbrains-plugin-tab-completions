@@ -102,6 +102,11 @@ class LineIndex {
         }
             .filterNot { it.sourceFilePath == cursorContext.filePath && it.lineNumber == cursorContext.lineNumber }
             .filter { cursorContext.completionContextKind.allows(it) }
+            .filterNot {
+                normalizedLookupPrefix.isBlank() &&
+                    cursorContext.nextNonBlankLineNormalized.isNotEmpty() &&
+                    LinePrefixMatcher.normalizeForLookup(it.normalizedContent) == cursorContext.nextNonBlankLineNormalized
+            }
 
         return CompletionRanker.rank(
             candidates = candidates,

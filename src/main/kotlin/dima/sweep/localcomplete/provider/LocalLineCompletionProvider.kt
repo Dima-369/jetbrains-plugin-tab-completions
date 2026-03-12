@@ -112,6 +112,11 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             val allLines = fullText.split('\n').map { it.removeSuffix("\r") }
             val prefixHashes = ContextHash.prefixHashesForLine(allLines, lineIndex)
             val suffixHashes = ContextHash.suffixHashesForLine(allLines, lineIndex)
+            val nextNonBlankLineNormalized = if (allowBlankLineCompletion) {
+                findNextNonBlankLineNormalized(allLines, lineIndex)
+            } else {
+                ""
+            }
             SuggestionSnapshot(
                 cursorContext = CursorContext(
                 normalizedPrefix = normalizedPrefix,
@@ -125,6 +130,7 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 lineNumber = lineIndex + 1,
                 rawPrefixText = prefixText,
                 rawSuffixText = suffixText,
+                nextNonBlankLineNormalized = nextNonBlankLineNormalized,
                 ),
                 documentText = fullText,
                 activeLineNumbers = activeLineNumbers,
@@ -161,6 +167,16 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
 
         val remaining = reindentedLine.substring(prefixMatchEnd)
         return LinePrefixMatcher.removeSuffixOverlap(remaining, context.rawSuffixText)
+    }
+
+    private fun findNextNonBlankLineNormalized(allLines: List<String>, lineIndex: Int): String {
+        for (nextIndex in (lineIndex + 1) until allLines.size) {
+            val normalized = LinePrefixMatcher.normalizeForLookup(allLines[nextIndex])
+            if (normalized.isNotEmpty()) {
+                return normalized
+            }
+        }
+        return ""
     }
 
     private fun detectCompletionContext(
