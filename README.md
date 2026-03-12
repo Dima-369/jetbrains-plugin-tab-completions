@@ -1,3 +1,11 @@
+# Local installation
+
+```bash
+./gradlew buildPlugin
+```
+
+Generates `jetbrains-plugin-local-sweep/build/distributions/jetbrains-plugin-local-sweep-1.0.zip` which can be installed in JetBrains IDEs via "Install Plugin from Disk".
+
 # AI Slop below
 
 ## Local Sweep — JetBrains FIM Plugin
