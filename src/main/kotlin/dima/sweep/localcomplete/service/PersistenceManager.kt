@@ -12,7 +12,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
 object PersistenceManager {
-    private const val VERSION = 3
+    private const val VERSION = 4
     private val indexFile: Path = Path.of(PathManager.getSystemPath(), "local-line-complete", "index.bin")
 
     fun save(records: List<FileRecord>) {

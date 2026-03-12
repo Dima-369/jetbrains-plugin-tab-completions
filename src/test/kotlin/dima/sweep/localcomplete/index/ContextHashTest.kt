@@ -2,6 +2,7 @@ package dima.sweep.localcomplete.index
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ContextHashTest {
@@ -36,5 +37,24 @@ class ContextHashTest {
         )
 
         assertNotEquals(ContextHash.forLine(first, 1), ContextHash.forLine(second, 1))
+    }
+
+    @Test
+    fun `graduated hashes include suffix context`() {
+        val candidate = listOf(
+            "logger.info(\"Success\")",
+            "return true;",
+        )
+        val current = listOf(
+            "",
+            "return true;",
+        )
+
+        val candidateHashes = ContextHash.forLineGraduated(candidate, 0)
+        val currentHashes = ContextHash.forLineGraduated(current, 0)
+
+        assertTrue(candidateHashes.isNotEmpty())
+        assertTrue(currentHashes.isNotEmpty())
+        assertEquals(candidateHashes.last(), currentHashes.last())
     }
 }
