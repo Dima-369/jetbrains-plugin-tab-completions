@@ -158,7 +158,7 @@ object CompletionRanker {
         }
     }
 
-    private fun indentDepth(ws: String): Int = ws.sumOf { if (it == '\t') 4 else 1 }
+    private fun indentDepth(ws: String): Int = ws.fold(0) { acc, c -> acc + if (c == '\t') 4 else 1 }
 
     private fun proximity(candidate: IndexedLine, cursorContext: CursorContext): Double {
         if (candidate.sourceFilePath == cursorContext.filePath) {

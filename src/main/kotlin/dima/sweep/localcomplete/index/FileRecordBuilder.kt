@@ -28,11 +28,11 @@ object FileRecordBuilder {
             )
         }
 
-        val indexedLines = rawLines.mapIndexedNotNull { index ->
+        val indexedLines = rawLines.mapIndexedNotNull { index, rawLine ->
             val currentLineNumber = index + 1
             if (currentLineNumber in activeLineNumbers) return@mapIndexedNotNull null
 
-            val originalLine = rawLines[index].removeSuffix("\r")
+            val originalLine = rawLine.removeSuffix("\r")
             val normalizedContent = originalLine.trim()
             if (LineFilter.shouldSkip(normalizedContent, originalLine.length, maxLineLength)) {
                 return@mapIndexedNotNull null
