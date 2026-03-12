@@ -14,6 +14,7 @@ class LineIndex {
     private val normalizedPrefixMap = TreeMap<String, MutableList<IndexedLine>>()
     private val prefixContextMap = HashMap<Long, MutableList<IndexedLine>>()
     private val suffixContextMap = HashMap<Long, MutableList<IndexedLine>>()
+    private val tokenMap = HashMap<String, MutableList<IndexedLine>>()
     private val fileMap = LinkedHashMap<String, FileRecord>()
 
     fun indexFile(
@@ -60,6 +61,9 @@ class LineIndex {
                     suffixContextMap.getOrPut(hash) { mutableListOf() }.add(line)
                 }
             }
+            for (token in extractTokens(line.normalizedContent)) {
+                tokenMap.getOrPut(token) { mutableListOf() }.add(line)
+            }
         }
     }
 
@@ -94,6 +98,14 @@ class LineIndex {
                     }
                 }
             }
+
+            for (token in extractTokens(line.normalizedContent)) {
+                val tokenBucket = tokenMap[token]
+                if (tokenBucket != null) {
+                    tokenBucket.removeIf { it.sourceFilePath == path && it.lineNumber == line.lineNumber }
+                    if (tokenBucket.isEmpty()) tokenMap.remove(token)
+                }
+            }
         }
     }
 
@@ -115,10 +127,20 @@ class LineIndex {
 
             (prefixCandidates + suffixCandidates).asSequence()
         } else {
-            normalizedPrefixMap.subMap(normalizedLookupPrefix, true, normalizedLookupPrefix + '\uffff', true)
+            val prefixResults = normalizedPrefixMap.subMap(normalizedLookupPrefix, true, normalizedLookupPrefix + '\uffff', true)
                 .values
                 .asSequence()
                 .flatten()
+                .toList()
+
+            if (prefixResults.size < TOKEN_FALLBACK_THRESHOLD) {
+                val prefixKeys = prefixResults.map { indexedLineKey(it) }.toHashSet()
+                val tokenCandidates = queryByLastToken(normalizedLookupPrefix)
+                    .filterNot { indexedLineKey(it) in prefixKeys }
+                (prefixResults + tokenCandidates).asSequence()
+            } else {
+                prefixResults.asSequence()
+            }
         }
             .filterNot { it.sourceFilePath == cursorContext.filePath && it.lineNumber == cursorContext.lineNumber }
             .filter { cursorContext.completionContextKind.allows(it) }
@@ -175,10 +197,35 @@ class LineIndex {
         )
     }
 
+    private fun queryByLastToken(normalizedLookupPrefix: String): List<IndexedLine> {
+        val lastToken = extractLastToken(normalizedLookupPrefix) ?: return emptyList()
+        return tokenMap[lastToken].orEmpty()
+    }
+
     fun clear() {
         normalizedPrefixMap.clear()
         prefixContextMap.clear()
         suffixContextMap.clear()
+        tokenMap.clear()
         fileMap.clear()
+    }
+
+    companion object {
+        private const val TOKEN_FALLBACK_THRESHOLD = 5
+        private const val MIN_TOKEN_LENGTH = 4
+        private val TOKEN_REGEX = Regex("[a-zA-Z]+")
+
+        fun extractTokens(content: String): Set<String> {
+            return TOKEN_REGEX.findAll(content)
+                .map { it.value.lowercase() }
+                .filter { it.length >= MIN_TOKEN_LENGTH }
+                .toSet()
+        }
+
+        fun extractLastToken(normalizedPrefix: String): String? {
+            val match = TOKEN_REGEX.findAll(normalizedPrefix).lastOrNull() ?: return null
+            val token = match.value.lowercase()
+            return if (token.length >= MIN_TOKEN_LENGTH) token else null
+        }
     }
 }
