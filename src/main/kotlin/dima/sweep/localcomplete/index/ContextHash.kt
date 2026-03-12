@@ -1,6 +1,8 @@
 package dima.sweep.localcomplete.index
 
 object ContextHash {
+    private val numberStringRegex = Regex("\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|\\b\\d+\\b")
+
     fun forLine(lines: List<String>, targetLineIndex: Int): Long {
         val collected = collectContextLines(lines, targetLineIndex, 3)
         if (collected.isEmpty()) return 0L
@@ -31,7 +33,7 @@ object ContextHash {
     }
 
     private fun normalizeContextLine(line: String): String {
-        return line.trim().lowercase()
+        return line.replace(numberStringRegex, "#").trim().lowercase()
     }
 
     private fun hash(lines: List<String>): Long {
