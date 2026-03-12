@@ -76,6 +76,7 @@ object FileRecordBuilder {
     }
 
     private fun containsGeneratedAnnotation(content: String): Boolean {
+        val header = content.lineSequence().take(10).joinToString("\n")
         val generatedMarkers = listOf(
             "@Generated",
             "@generated",
@@ -87,7 +88,7 @@ object FileRecordBuilder {
             "This file was automatically generated",
             "This source file was auto-generated",
         )
-        return generatedMarkers.any { content.contains(it, ignoreCase = true) }
+        return generatedMarkers.any { header.contains(it, ignoreCase = true) }
     }
 
     private fun hasExcessiveAverageLineLength(rawLines: List<String>): Boolean {
