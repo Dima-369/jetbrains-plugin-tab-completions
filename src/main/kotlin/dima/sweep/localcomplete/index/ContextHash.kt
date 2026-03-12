@@ -25,7 +25,7 @@ object ContextHash {
 
     fun suffixHashesForLine(lines: List<String>, targetLineIndex: Int): List<Long> {
         return graduatedHashes(
-            collected = collectSuffixContextLines(lines, targetLineIndex, 2),
+            collected = collectSuffixContextLines(lines, targetLineIndex, 3),
             salt = suffixSalt,
         )
     }
