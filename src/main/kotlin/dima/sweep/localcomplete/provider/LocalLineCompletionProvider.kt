@@ -20,6 +20,7 @@ import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.openapi.editor.actionSystem.EditorActionManager
 import dima.sweep.localcomplete.LocalCompleteKeys
 import dima.sweep.localcomplete.index.ContextHash
+import dima.sweep.localcomplete.index.LinePrefixMatcher
 import dima.sweep.localcomplete.model.CursorContext
 import dima.sweep.localcomplete.model.IndexedLine
 import dima.sweep.localcomplete.service.LineIndexService
@@ -130,18 +131,9 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
 
     private fun buildCompletionText(indexedLine: IndexedLine, context: CursorContext): String? {
         val reindentedLine = context.leadingWhitespace + indexedLine.originalContent.trimStart()
-        if (!reindentedLine.startsWith(context.rawPrefixText)) return null
+        val prefixMatchEnd = LinePrefixMatcher.findMatchEnd(reindentedLine, context.rawPrefixText) ?: return null
 
-        val remaining = reindentedLine.removePrefix(context.rawPrefixText)
-        if (context.rawSuffixText.isEmpty()) {
-            return remaining
-        }
-
-        val suffixIndex = remaining.indexOf(context.rawSuffixText)
-        if (suffixIndex > 0) {
-            return remaining.substring(0, suffixIndex)
-        }
-
-        return null
+        val remaining = reindentedLine.substring(prefixMatchEnd)
+        return LinePrefixMatcher.removeSuffixOverlap(remaining, context.rawSuffixText)
     }
 }

@@ -12,6 +12,7 @@ import java.util.TreeMap
 
 class LineIndex {
     private val lineMap = TreeMap<String, MutableList<IndexedLine>>()
+    private val normalizedPrefixMap = TreeMap<String, MutableList<IndexedLine>>()
     private val contextMap = HashMap<Long, MutableList<IndexedLine>>()
     private val fileMap = LinkedHashMap<String, FileRecord>()
 
@@ -57,6 +58,8 @@ class LineIndex {
         fileMap[record.absolutePath] = record
         record.lines.forEach { line ->
             lineMap.getOrPut(line.normalizedContent) { mutableListOf() }.add(line)
+            normalizedPrefixMap.getOrPut(LinePrefixMatcher.normalizeForLookup(line.normalizedContent)) { mutableListOf() }
+                .add(line)
             for (hash in line.contextHashes) {
                 if (hash != 0L) {
                     contextMap.getOrPut(hash) { mutableListOf() }.add(line)
@@ -76,6 +79,15 @@ class LineIndex {
                 }
             }
 
+            val normalizedPrefix = LinePrefixMatcher.normalizeForLookup(line.normalizedContent)
+            val normalizedBucket = normalizedPrefixMap[normalizedPrefix]
+            if (normalizedBucket != null) {
+                normalizedBucket.removeIf { it.sourceFilePath == path && it.lineNumber == line.lineNumber }
+                if (normalizedBucket.isEmpty()) {
+                    normalizedPrefixMap.remove(normalizedPrefix)
+                }
+            }
+
             for (hash in line.contextHashes) {
                 if (hash != 0L) {
                     val contextBucket = contextMap[hash]
@@ -91,14 +103,15 @@ class LineIndex {
     }
 
     fun query(prefix: String, cursorContext: CursorContext, limit: Int): List<RankedCompletion> {
-        val candidates = if (prefix.isBlank()) {
+        val normalizedLookupPrefix = LinePrefixMatcher.normalizeForLookup(prefix)
+        val candidates = if (normalizedLookupPrefix.isBlank()) {
             cursorContext.contextHashes
                 .filter { it != 0L }
                 .firstNotNullOfOrNull { hash ->
                     contextMap[hash]?.takeIf { it.isNotEmpty() }
                 }?.asSequence() ?: emptySequence()
         } else {
-            lineMap.subMap(prefix, true, prefix + '\uffff', true)
+            normalizedPrefixMap.subMap(normalizedLookupPrefix, true, normalizedLookupPrefix + '\uffff', true)
                 .values
                 .asSequence()
                 .flatten()
@@ -132,6 +145,7 @@ class LineIndex {
 
     fun clear() {
         lineMap.clear()
+        normalizedPrefixMap.clear()
         contextMap.clear()
         fileMap.clear()
     }
