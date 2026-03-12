@@ -48,6 +48,6 @@ class SessionLineCacheTest {
     }
 
     private fun line(content: String, lineNumber: Int): IndexedLine {
-        return IndexedLine(content.trim(), content, "", "/tmp/current.kt", lineNumber, listOf(0L))
+        return IndexedLine(content.trim(), content, "", "/tmp/current.kt", lineNumber, emptyList(), emptyList())
     }
 }

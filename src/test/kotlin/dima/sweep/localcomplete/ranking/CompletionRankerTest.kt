@@ -92,8 +92,8 @@ class CompletionRankerTest {
 
     @Test
     fun `suffix context gives a smaller secondary bonus`() {
-        val suffixMatched = IndexedLine("alphaBeta()", "alphaBeta()", "", "/tmp/a.kt", 1, listOf(7L, 9L))
-        val noSuffixMatch = IndexedLine("alphaGamma()", "alphaGamma()", "", "/tmp/b.kt", 1, listOf(7L))
+        val suffixMatched = IndexedLine("alphaBeta()", "alphaBeta()", "", "/tmp/a.kt", 1, listOf(7L, 9L), emptyList())
+        val noSuffixMatch = IndexedLine("alphaGamma()", "alphaGamma()", "", "/tmp/b.kt", 1, listOf(7L), emptyList())
         val records = recordsFor(suffixMatched, noSuffixMatch)
 
         val ranked = CompletionRanker.rank(
@@ -114,7 +114,7 @@ class CompletionRankerTest {
     }
 
     private fun candidate(content: String, path: String, lineNumber: Int): IndexedLine {
-        return IndexedLine(content.trim(), content, "", path, lineNumber, listOf(1L))
+        return IndexedLine(content.trim(), content, "", path, lineNumber, listOf(1L), emptyList())
     }
 
     private fun recordsFor(vararg candidates: IndexedLine): List<FileRecord> {
