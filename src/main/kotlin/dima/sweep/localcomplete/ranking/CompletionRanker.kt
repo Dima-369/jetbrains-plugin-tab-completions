@@ -6,6 +6,7 @@ import dima.sweep.localcomplete.model.FileRecord
 import dima.sweep.localcomplete.model.IndexedLine
 import dima.sweep.localcomplete.model.RankedCompletion
 import dima.sweep.localcomplete.index.LineFilter
+import dima.sweep.localcomplete.model.CompletionContextKind
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -55,11 +56,7 @@ object CompletionRanker {
         sessionScoreWeight: Double = 25.0,
     ): Double {
         val contextSimilarity = contextSimilarityScore(candidate, cursorContext)
-        val suffixContextBonus = when {
-            // ONLY compare candidate's SUFFIX with cursor's SUFFIX
-            candidate.suffixContextHashes.any { hash -> hash != 0L && cursorContext.suffixContextHashes.contains(hash) } -> 0.3
-            else -> 0.0
-        }
+        val suffixContextScore = suffixContextScore(candidate, cursorContext)
         val extensionMatch = if (fileRecord.extension == cursorContext.fileExtension) 1.0 else 0.0
         val recency = when {
             newest <= oldest -> 1.0
@@ -76,13 +73,18 @@ object CompletionRanker {
         val lengthPenalty = lengthPenalty(candidate.normalizedContent.length)
         val indentationMatch = indentationMatch(candidate, cursorContext)
 
-        return ((30.0 * contextSimilarity) +
+        val (prefixWeight, suffixWeight) = when (cursorContext.completionContextKind) {
+            CompletionContextKind.COMMENT -> 15.0 to 25.0
+            else -> 30.0 to 10.0
+        }
+
+        return ((prefixWeight * contextSimilarity) +
             (25.0 * prefixRatio) +
             (15.0 * exactCaseMatch) +
             (10.0 * recency) +
             (10.0 * proximity) +
             (sessionScoreWeight * sessionScore) +
-            (5.0 * suffixContextBonus) +
+            (suffixWeight * suffixContextScore) +
             (5.0 * contentQuality) +
             (5.0 * freqScore) +
             (3.0 * extensionMatch) +
@@ -102,6 +104,17 @@ object CompletionRanker {
             }
         }
 
+        return bestDepthScore
+    }
+
+    private fun suffixContextScore(candidate: IndexedLine, cursorContext: CursorContext): Double {
+        var bestDepthScore = 0.0
+        for ((depth, hash) in cursorContext.suffixContextHashes.withIndex()) {
+            if (hash != 0L && candidate.suffixContextHashes.getOrNull(depth) == hash) {
+                val depthScore = 1.0 - (depth * 0.2)
+                bestDepthScore = maxOf(bestDepthScore, depthScore)
+            }
+        }
         return bestDepthScore
     }
 
