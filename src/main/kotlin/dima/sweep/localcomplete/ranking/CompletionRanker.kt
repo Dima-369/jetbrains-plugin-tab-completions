@@ -181,11 +181,45 @@ object CompletionRanker {
             return 0.7 + directionBonus + 0.25 / (1.0 + distance / 20.0)
         }
 
+        val candidateFileName = candidate.sourceFilePath.substringAfterLast('/')
+        val currentFileName = cursorContext.filePath.substringAfterLast('/')
+
+        // Boost if files are Test <-> Impl pairs (e.g., UserService and UserServiceTest)
+        if (isTestImplPair(candidateFileName, currentFileName)) {
+            return 0.6
+        }
+
         val candidateDir = candidate.sourceFilePath.substringBeforeLast('/', missingDelimiterValue = "")
         val currentDir = cursorContext.filePath.substringBeforeLast('/', missingDelimiterValue = "")
         if (candidateDir.isNotEmpty() && candidateDir == currentDir) return 0.5
 
         val basePath = cursorContext.projectBasePath ?: return 0.0
         return if (candidate.sourceFilePath.startsWith(basePath)) 0.2 else 0.0
+    }
+
+    private val testSuffixes = listOf("Test.kt", "Test.java", "Test.scala", "Test.groovy", "Spec.kt", "Spec.java", "Tests.kt", "Tests.java")
+    private val implExtensions = listOf(".kt", ".java", ".scala", ".groovy")
+
+    private fun isTestImplPair(fileName1: String, fileName2: String): Boolean {
+        val base1 = stripTestSuffix(fileName1)
+        val base2 = stripTestSuffix(fileName2)
+        if (base1 != null && base2 != null) return false // both are test files
+        val testBase = base1 ?: base2 ?: return false
+        val implBase = if (base1 != null) stripExtension(fileName2) else stripExtension(fileName1)
+        return testBase == implBase
+    }
+
+    private fun stripTestSuffix(fileName: String): String? {
+        for (suffix in testSuffixes) {
+            if (fileName.endsWith(suffix)) return fileName.removeSuffix(suffix)
+        }
+        return null
+    }
+
+    private fun stripExtension(fileName: String): String? {
+        for (ext in implExtensions) {
+            if (fileName.endsWith(ext)) return fileName.removeSuffix(ext)
+        }
+        return null
     }
 }
