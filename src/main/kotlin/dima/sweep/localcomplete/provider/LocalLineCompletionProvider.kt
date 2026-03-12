@@ -69,7 +69,7 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 // Record the accepted line for future scoring
                 if (file != null) {
                     val indexedLine = IndexedLine(
-                        normalizedContent = LinePrefixMatcher.normalizeForLookup(fullLine),
+                        normalizedContent = fullLine.trim(),
                         originalContent = fullLine,
                         leadingWhitespace = fullLine.takeWhile { it == ' ' || it == '\t' },
                         sourceFilePath = file.path,
@@ -173,6 +173,7 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
         // Check if cached suggestion is still valid before re-querying
         val cached = lastSuggestion
         if (cached != null &&
+            System.currentTimeMillis() - cached.timestamp < 10_000 &&
             cached.filePath == cursorContext.filePath &&
             cached.lineNumber == cursorContext.lineNumber
         ) {
