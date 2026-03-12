@@ -18,6 +18,7 @@ class LinePrefixMatcherTest {
     fun `removes overlapping typed suffix`() {
         assertEquals("callSomething(", LinePrefixMatcher.removeSuffixOverlap("callSomething())", "))"))
         assertEquals("result = build", LinePrefixMatcher.removeSuffixOverlap("result = build})", "})"))
+        assertEquals(" = foo", LinePrefixMatcher.removeSuffixOverlap(" = foo.bar()", ".bar()"))
     }
 
     @Test

@@ -46,6 +46,11 @@ object LinePrefixMatcher {
         val trimmedSuffix = rawSuffixText.trimStart()
         if (remaining.isEmpty() || trimmedSuffix.isEmpty()) return remaining
 
+        val embeddedSuffixIndex = remaining.indexOf(trimmedSuffix, ignoreCase = true)
+        if (embeddedSuffixIndex >= 0) {
+            return remaining.substring(0, embeddedSuffixIndex)
+        }
+
         for (overlapLength in min(remaining.length, trimmedSuffix.length) downTo 1) {
             val overlapStart = remaining.length - overlapLength
             if (remaining.regionMatches(overlapStart, trimmedSuffix, 0, overlapLength, ignoreCase = true)) {
