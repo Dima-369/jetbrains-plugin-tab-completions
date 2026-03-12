@@ -2,7 +2,6 @@ package dima.sweep.localcomplete.index
 
 object LineFilter {
     private val trivialTokens = setOf("/*", "*/", "//", "*")
-    private val trivialKeywords = setOf("return", "return;", "break", "break;", "continue", "continue;")
     private val singleCharTokens = setOf('{', '}', '(', ')', '[', ']', ';')
 
     fun shouldSkip(normalizedContent: String, rawLength: Int, maxLineLength: Int): Boolean {
@@ -10,7 +9,6 @@ object LineFilter {
         if (rawLength > maxLineLength) return true
         if (normalizedContent.length == 1 && normalizedContent[0] in singleCharTokens) return true
         if (normalizedContent.length <= 2 && normalizedContent in trivialTokens) return true
-        if (normalizedContent in trivialKeywords) return true
         return false
     }
 
