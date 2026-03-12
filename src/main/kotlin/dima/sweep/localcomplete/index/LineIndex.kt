@@ -92,8 +92,13 @@ class LineIndex {
         val normalizedLookupPrefix = LinePrefixMatcher.normalizeForLookup(prefix)
         val candidates = if (normalizedLookupPrefix.isBlank()) {
             val prefixCandidates = queryByContextHashes(cursorContext.prefixContextHashes)
-            (prefixCandidates.takeIf { it.isNotEmpty() }
-                ?: queryByContextHashes(cursorContext.suffixContextHashes)).asSequence()
+            val prefixKeys = prefixCandidates
+                .map { indexedLineKey(it) }
+                .toHashSet()
+            val suffixCandidates = queryByContextHashes(cursorContext.suffixContextHashes)
+                .filterNot { indexedLineKey(it) in prefixKeys }
+
+            (prefixCandidates + suffixCandidates).asSequence()
         } else {
             normalizedPrefixMap.subMap(normalizedLookupPrefix, true, normalizedLookupPrefix + '\uffff', true)
                 .values
@@ -119,13 +124,16 @@ class LineIndex {
     }
 
     private fun queryByContextHashes(contextHashes: List<Long>): List<IndexedLine> {
+        val seenKeys = HashSet<String>()
         return contextHashes
+            .asSequence()
             .filter { it != 0L }
-            .firstNotNullOfOrNull { hash ->
-                contextMap[hash]?.takeIf { it.isNotEmpty() }
-            }
-            ?: emptyList()
+            .flatMap { hash -> contextMap[hash].orEmpty().asSequence() }
+            .filter { seenKeys.add(indexedLineKey(it)) }
+            .toList()
     }
+
+    private fun indexedLineKey(line: IndexedLine): String = "${line.sourceFilePath}:${line.lineNumber}"
 
     fun findFileRecord(path: String): FileRecord? = fileMap[path]
 

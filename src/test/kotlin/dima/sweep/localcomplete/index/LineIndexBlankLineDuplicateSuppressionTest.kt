@@ -40,7 +40,7 @@ class LineIndexBlankLineDuplicateSuppressionTest {
             limit = 5,
         )
 
-        assertTrue(results.isEmpty())
+        assertTrue(results.none { it.indexedLine.originalContent == "second()" })
     }
 
     @Test
