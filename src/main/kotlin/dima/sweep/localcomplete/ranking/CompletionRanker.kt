@@ -54,12 +54,7 @@ object CompletionRanker {
         sessionScore: Double,
         sessionScoreWeight: Double = 25.0,
     ): Double {
-        val contextSimilarity = when {
-            candidate.contextHash != 0L && candidate.contextHash == cursorContext.contextHash -> 1.0
-            // ONLY compare candidate's PREFIX with cursor's PREFIX
-            candidate.prefixContextHashes.any { hash -> hash != 0L && cursorContext.prefixContextHashes.contains(hash) } -> 0.5
-            else -> 0.0
-        }
+        val contextSimilarity = contextSimilarityScore(candidate, cursorContext)
         val suffixContextBonus = when {
             // ONLY compare candidate's SUFFIX with cursor's SUFFIX
             candidate.suffixContextHashes.any { hash -> hash != 0L && cursorContext.suffixContextHashes.contains(hash) } -> 0.3
@@ -78,6 +73,7 @@ object CompletionRanker {
         val freqScore = frequencyScore(frequency)
         val contentQuality = contentQuality(candidate.normalizedContent)
         val bracketPenalty = LineFilter.bracketBalancePenalty(candidate.normalizedContent, cursorContext.rawSuffixText)
+        val lengthPenalty = lengthPenalty(candidate.normalizedContent.length)
 
         return ((30.0 * contextSimilarity) +
             (25.0 * prefixRatio) +
@@ -88,7 +84,37 @@ object CompletionRanker {
             (5.0 * suffixContextBonus) +
             (5.0 * contentQuality) +
             (5.0 * freqScore) +
-            (3.0 * extensionMatch)) * bracketPenalty
+            (3.0 * extensionMatch)) * bracketPenalty * lengthPenalty
+    }
+
+    private fun contextSimilarityScore(candidate: IndexedLine, cursorContext: CursorContext): Double {
+        if (candidate.contextHash != 0L && candidate.contextHash == cursorContext.contextHash) {
+            return 1.0
+        }
+
+        val matchingPrefixHashes = candidate.prefixContextHashes.filter { hash ->
+            hash != 0L && cursorContext.prefixContextHashes.contains(hash)
+        }
+
+        if (matchingPrefixHashes.isEmpty()) {
+            return 0.0
+        }
+
+        val maxPossibleMatches = maxOf(candidate.prefixContextHashes.count { it != 0L }, 1)
+        val matchDepth = matchingPrefixHashes.size.toDouble() / maxPossibleMatches.toDouble()
+
+        return 0.3 + 0.2 * matchDepth
+    }
+
+    private fun lengthPenalty(lineLength: Int): Double {
+        return when {
+            lineLength <= 50 -> 1.0
+            lineLength <= 80 -> 0.95
+            lineLength <= 100 -> 0.85
+            lineLength <= 120 -> 0.70
+            lineLength <= 150 -> 0.55
+            else -> 0.40
+        }
     }
 
     private fun exactCaseMatch(candidate: IndexedLine, cursorContext: CursorContext): Double {
