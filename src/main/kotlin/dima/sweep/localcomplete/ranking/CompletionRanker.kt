@@ -15,6 +15,7 @@ object CompletionRanker {
         cursorContext: CursorContext,
         fileRecords: Collection<FileRecord>,
         fileRecordByPath: (String) -> FileRecord?,
+        sessionScore: (IndexedLine) -> Double,
         limit: Int,
     ): List<RankedCompletion> {
         val timestamps = fileRecords.map { it.lastIndexedTimestamp }
@@ -33,7 +34,7 @@ object CompletionRanker {
                     val fileRecord = fileRecordByPath(candidate.sourceFilePath) ?: return@candidateLoop null
                     RankedCompletion(
                         candidate,
-                        score(candidate, fileRecord, cursorContext, oldest, newest, frequency),
+                        score(candidate, fileRecord, cursorContext, oldest, newest, frequency, sessionScore(candidate)),
                     )
                 }.maxByOrNull { it.score }
             }
@@ -49,6 +50,7 @@ object CompletionRanker {
         oldest: Long,
         newest: Long,
         frequency: Int,
+        sessionScore: Double,
     ): Double {
         val contextSimilarity = when {
             candidate.contextHash != 0L && candidate.contextHash == cursorContext.contextHash -> 1.0
@@ -74,6 +76,7 @@ object CompletionRanker {
             (15.0 * exactCaseMatch) +
             (10.0 * recency) +
             (10.0 * proximity) +
+            (50.0 * sessionScore) +
             (5.0 * contentQuality) +
             (5.0 * freqScore) +
             (3.0 * extensionMatch)) * bracketPenalty

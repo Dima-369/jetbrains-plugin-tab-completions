@@ -17,7 +17,7 @@ class FileSaveListener : FileDocumentManagerListener {
 
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                LineIndexService.getInstance().indexFile(file.path, text, file.extension.orEmpty())
+                LineIndexService.getInstance().indexFile(file.path, text, file.extension.orEmpty(), trackSessionChanges = true)
             } catch (t: Throwable) {
                 logger.warn("Failed to index saved file: ${file.path}", t)
             }

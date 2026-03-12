@@ -37,6 +37,7 @@ class LineIndexService {
     private val loading = AtomicBoolean(false)
     private val dirtyDocumentPaths = ConcurrentHashMap.newKeySet<String>()
     private val documentListenerRegistered = AtomicBoolean(false)
+    private val sessionLineCache = SessionLineCache()
 
     init {
         val scheduler = AppExecutorUtil.getAppScheduledExecutorService()
@@ -88,7 +89,7 @@ class LineIndexService {
         }
     }
 
-    fun indexFile(path: String, content: String, extension: String) {
+    fun indexFile(path: String, content: String, extension: String, trackSessionChanges: Boolean = false) {
         ensureLoadedInBackground()
         dirtyDocumentPaths.remove(path)
         val settings = LocalCompleteSettings.getInstance()
@@ -111,8 +112,12 @@ class LineIndexService {
         )
 
         lock.write {
+            val previousRecord = lineIndex.findFileRecord(path)
             lineIndex.removeFile(path)
             lineIndex.loadFileRecord(fileRecord)
+            if (trackSessionChanges) {
+                sessionLineCache.rememberUpdatedLines(fileRecord.lines, previousRecord?.lines.orEmpty())
+            }
             dirty.set(true)
         }
     }
@@ -120,7 +125,7 @@ class LineIndexService {
     fun query(prefix: String, cursorContext: CursorContext, limit: Int = 5): List<RankedCompletion> {
         ensureLoadedInBackground()
         if (loading.get() || !LocalCompleteSettings.getInstance().enabled) return emptyList()
-        return lock.read { lineIndex.query(prefix, cursorContext, limit) }
+        return lock.read { lineIndex.query(prefix, cursorContext, limit, sessionLineCache::score) }
     }
 
     fun removeFile(path: String) {
@@ -166,7 +171,7 @@ class LineIndexService {
 
         fileData.forEach { (path, text, extension) ->
             try {
-                indexFile(path, text, extension)
+                indexFile(path, text, extension, trackSessionChanges = true)
             } catch (t: Throwable) {
                 logger.warn("Failed to reindex dirty document: $path", t)
             }

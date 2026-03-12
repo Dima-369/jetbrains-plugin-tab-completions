@@ -102,7 +102,12 @@ class LineIndex {
         }
     }
 
-    fun query(prefix: String, cursorContext: CursorContext, limit: Int): List<RankedCompletion> {
+    fun query(
+        prefix: String,
+        cursorContext: CursorContext,
+        limit: Int,
+        sessionScore: (IndexedLine) -> Double = { 0.0 },
+    ): List<RankedCompletion> {
         val normalizedLookupPrefix = LinePrefixMatcher.normalizeForLookup(prefix)
         val candidates = if (normalizedLookupPrefix.isBlank()) {
             cursorContext.contextHashes
@@ -124,9 +129,12 @@ class LineIndex {
             cursorContext = cursorContext,
             fileRecords = fileMap.values,
             fileRecordByPath = { fileMap[it] },
+            sessionScore = sessionScore,
             limit = limit,
         )
     }
+
+    fun findFileRecord(path: String): FileRecord? = fileMap[path]
 
     fun getRecords(): List<FileRecord> = fileMap.values.toList()
 

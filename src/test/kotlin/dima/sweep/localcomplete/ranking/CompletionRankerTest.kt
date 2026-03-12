@@ -19,6 +19,7 @@ class CompletionRankerTest {
             cursorContext = context(rawPrefixText = "MyV", normalizedPrefix = "MyV"),
             fileRecords = records,
             fileRecordByPath = { path -> records.firstOrNull { it.absolutePath == path } },
+            sessionScore = { 0.0 },
             limit = 2,
         )
 
@@ -43,10 +44,29 @@ class CompletionRankerTest {
             cursorContext = context(rawPrefixText = "", normalizedPrefix = ""),
             fileRecords = records,
             fileRecordByPath = { path -> records.firstOrNull { it.absolutePath == path } },
+            sessionScore = { 0.0 },
             limit = 2,
         )
 
         assertEquals("domainSpecificCall()", ranked.first().indexedLine.originalContent)
+    }
+
+    @Test
+    fun `session score can push a recent line to the top`() {
+        val recent = candidate("rememberMe()", "/tmp/recent.kt", 1)
+        val stale = candidate("rememberYou()", "/tmp/stale.kt", 1)
+        val records = recordsFor(recent, stale)
+
+        val ranked = CompletionRanker.rank(
+            candidates = sequenceOf(recent, stale),
+            cursorContext = context(rawPrefixText = "remember", normalizedPrefix = "remember"),
+            fileRecords = records,
+            fileRecordByPath = { path -> records.firstOrNull { it.absolutePath == path } },
+            sessionScore = { candidate -> if (candidate.originalContent == "rememberMe()") 1.0 else 0.0 },
+            limit = 2,
+        )
+
+        assertEquals("rememberMe()", ranked.first().indexedLine.originalContent)
     }
 
     private fun candidate(content: String, path: String, lineNumber: Int): IndexedLine {

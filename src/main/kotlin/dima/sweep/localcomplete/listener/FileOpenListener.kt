@@ -18,7 +18,7 @@ class FileOpenListener : FileEditorManagerListener {
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 val content = String(file.contentsToByteArray(), file.charset)
-                LineIndexService.getInstance().indexFile(file.path, content, file.extension.orEmpty())
+                LineIndexService.getInstance().indexFile(file.path, content, file.extension.orEmpty(), trackSessionChanges = false)
             } catch (t: Throwable) {
                 logger.warn("Failed to index opened file: ${file.path}", t)
             }

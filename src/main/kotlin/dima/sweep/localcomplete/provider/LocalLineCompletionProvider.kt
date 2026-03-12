@@ -121,7 +121,12 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
 
         val (snapshot, documentText) = result
 
-        LineIndexService.getInstance().indexFile(snapshot.filePath, documentText, snapshot.fileExtension)
+        LineIndexService.getInstance().indexFile(
+            snapshot.filePath,
+            documentText,
+            snapshot.fileExtension,
+            trackSessionChanges = true,
+        )
 
         val completionText = LineIndexService.getInstance()
             .query(snapshot.normalizedPrefix, snapshot)
