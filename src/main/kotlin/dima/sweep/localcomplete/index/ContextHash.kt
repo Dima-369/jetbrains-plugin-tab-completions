@@ -5,19 +5,29 @@ object ContextHash {
     private const val suffixSalt = 0x2468ACE13579BDFL
 
     fun forLine(lines: List<String>, targetLineIndex: Int): Long {
-        return forLineGraduated(lines, targetLineIndex).firstOrNull() ?: 0L
+        return prefixHashesForLine(lines, targetLineIndex).firstOrNull()
+            ?: suffixHashesForLine(lines, targetLineIndex).firstOrNull()
+            ?: 0L
     }
 
     fun forLineGraduated(lines: List<String>, targetLineIndex: Int): List<Long> {
-        val prefixHashes = graduatedHashes(
+        val prefixHashes = prefixHashesForLine(lines, targetLineIndex)
+        val suffixHashes = suffixHashesForLine(lines, targetLineIndex)
+        return (prefixHashes + suffixHashes).ifEmpty { listOf(0L) }
+    }
+
+    fun prefixHashesForLine(lines: List<String>, targetLineIndex: Int): List<Long> {
+        return graduatedHashes(
             collected = collectPrefixContextLines(lines, targetLineIndex, 3).asReversed(),
             salt = prefixSalt,
         )
-        val suffixHashes = graduatedHashes(
+    }
+
+    fun suffixHashesForLine(lines: List<String>, targetLineIndex: Int): List<Long> {
+        return graduatedHashes(
             collected = collectSuffixContextLines(lines, targetLineIndex, 2),
             salt = suffixSalt,
         )
-        return (prefixHashes + suffixHashes).ifEmpty { listOf(0L) }
     }
 
     private fun collectPrefixContextLines(lines: List<String>, targetLineIndex: Int, maxCount: Int): List<String> {

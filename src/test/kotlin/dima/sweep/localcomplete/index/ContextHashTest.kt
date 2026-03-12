@@ -23,6 +23,8 @@ class ContextHashTest {
 
         assertEquals(ContextHash.forLine(first, 3), ContextHash.forLine(second, 3))
         assertEquals(ContextHash.forLineGraduated(first, 3), ContextHash.forLineGraduated(second, 3))
+        assertEquals(ContextHash.prefixHashesForLine(first, 3), ContextHash.prefixHashesForLine(second, 3))
+        assertEquals(ContextHash.suffixHashesForLine(first, 3), ContextHash.suffixHashesForLine(second, 3))
     }
 
     @Test
@@ -66,11 +68,11 @@ class ContextHashTest {
             "return true;",
         )
 
-        val candidateHashes = ContextHash.forLineGraduated(candidate, 0)
-        val currentHashes = ContextHash.forLineGraduated(current, 0)
+        val candidateHashes = ContextHash.suffixHashesForLine(candidate, 0)
+        val currentHashes = ContextHash.suffixHashesForLine(current, 0)
 
         assertTrue(candidateHashes.isNotEmpty())
         assertTrue(currentHashes.isNotEmpty())
-        assertEquals(candidateHashes.last(), currentHashes.last())
+        assertEquals(candidateHashes.first(), currentHashes.first())
     }
 }

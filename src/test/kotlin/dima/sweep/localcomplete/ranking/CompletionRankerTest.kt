@@ -90,6 +90,29 @@ class CompletionRankerTest {
         assertEquals("rememberMe()", ranked.first().indexedLine.originalContent)
     }
 
+    @Test
+    fun `suffix context gives a smaller secondary bonus`() {
+        val suffixMatched = IndexedLine("alphaBeta()", "alphaBeta()", "", "/tmp/a.kt", 1, listOf(7L, 9L))
+        val noSuffixMatch = IndexedLine("alphaGamma()", "alphaGamma()", "", "/tmp/b.kt", 1, listOf(7L))
+        val records = recordsFor(suffixMatched, noSuffixMatch)
+
+        val ranked = CompletionRanker.rank(
+            candidates = sequenceOf(suffixMatched, noSuffixMatch),
+            cursorContext = context(
+                rawPrefixText = "alpha",
+                normalizedPrefix = "alpha",
+                prefixContextHashes = emptyList(),
+                suffixContextHashes = listOf(9L),
+            ),
+            fileRecords = records,
+            fileRecordByPath = { path -> records.firstOrNull { it.absolutePath == path } },
+            sessionScore = { 0.0 },
+            limit = 2,
+        )
+
+        assertEquals("alphaBeta()", ranked.first().indexedLine.originalContent)
+    }
+
     private fun candidate(content: String, path: String, lineNumber: Int): IndexedLine {
         return IndexedLine(content.trim(), content, "", path, lineNumber, listOf(1L))
     }
@@ -100,7 +123,12 @@ class CompletionRankerTest {
         }
     }
 
-    private fun context(rawPrefixText: String, normalizedPrefix: String): CursorContext {
+    private fun context(
+        rawPrefixText: String,
+        normalizedPrefix: String,
+        prefixContextHashes: List<Long> = listOf(1L),
+        suffixContextHashes: List<Long> = emptyList(),
+    ): CursorContext {
         return CursorContext(
             normalizedPrefix = normalizedPrefix,
             leadingWhitespace = "",
@@ -108,7 +136,8 @@ class CompletionRankerTest {
             fileExtension = "kt",
             filePath = "/tmp/current.kt",
             projectBasePath = "/tmp",
-            contextHashes = listOf(1L),
+            prefixContextHashes = prefixContextHashes,
+            suffixContextHashes = suffixContextHashes,
             lineNumber = 1,
             rawPrefixText = rawPrefixText,
             rawSuffixText = "",

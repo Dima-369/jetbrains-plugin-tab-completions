@@ -101,7 +101,8 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             if (!allowBlankLineCompletion && normalizedPrefix.length < settings.minPrefixLength) return@readAction null
 
             val allLines = fullText.split('\n').map { it.removeSuffix("\r") }
-            val hashes = ContextHash.forLineGraduated(allLines, lineIndex)
+            val prefixHashes = ContextHash.prefixHashesForLine(allLines, lineIndex)
+            val suffixHashes = ContextHash.suffixHashesForLine(allLines, lineIndex)
             Pair(
                 CursorContext(
                 normalizedPrefix = normalizedPrefix,
@@ -110,7 +111,8 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 fileExtension = file.extension.orEmpty(),
                 filePath = file.path,
                 projectBasePath = request.editor.project?.basePath,
-                contextHashes = hashes,
+                prefixContextHashes = prefixHashes,
+                suffixContextHashes = suffixHashes,
                 lineNumber = lineIndex + 1,
                 rawPrefixText = prefixText,
                 rawSuffixText = suffixText,

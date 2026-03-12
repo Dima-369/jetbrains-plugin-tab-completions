@@ -54,7 +54,11 @@ object CompletionRanker {
     ): Double {
         val contextSimilarity = when {
             candidate.contextHash != 0L && candidate.contextHash == cursorContext.contextHash -> 1.0
-            candidate.contextHashes.any { hash -> hash != 0L && cursorContext.contextHashes.contains(hash) } -> 0.5
+            candidate.contextHashes.any { hash -> hash != 0L && cursorContext.prefixContextHashes.contains(hash) } -> 0.5
+            else -> 0.0
+        }
+        val suffixContextBonus = when {
+            candidate.contextHashes.any { hash -> hash != 0L && cursorContext.suffixContextHashes.contains(hash) } -> 0.3
             else -> 0.0
         }
         val extensionMatch = if (fileRecord.extension == cursorContext.fileExtension) 1.0 else 0.0
@@ -77,6 +81,7 @@ object CompletionRanker {
             (10.0 * recency) +
             (10.0 * proximity) +
             (50.0 * sessionScore) +
+            (5.0 * suffixContextBonus) +
             (5.0 * contentQuality) +
             (5.0 * freqScore) +
             (3.0 * extensionMatch)) * bracketPenalty

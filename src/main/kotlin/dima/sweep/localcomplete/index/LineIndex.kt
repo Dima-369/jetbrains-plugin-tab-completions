@@ -100,11 +100,9 @@ class LineIndex {
     ): List<RankedCompletion> {
         val normalizedLookupPrefix = LinePrefixMatcher.normalizeForLookup(prefix)
         val candidates = if (normalizedLookupPrefix.isBlank()) {
-            cursorContext.contextHashes
-                .filter { it != 0L }
-                .firstNotNullOfOrNull { hash ->
-                    contextMap[hash]?.takeIf { it.isNotEmpty() }
-                }?.asSequence() ?: emptySequence()
+            val prefixCandidates = queryByContextHashes(cursorContext.prefixContextHashes)
+            (prefixCandidates.takeIf { it.isNotEmpty() }
+                ?: queryByContextHashes(cursorContext.suffixContextHashes)).asSequence()
         } else {
             normalizedPrefixMap.subMap(normalizedLookupPrefix, true, normalizedLookupPrefix + '\uffff', true)
                 .values
@@ -122,6 +120,15 @@ class LineIndex {
             sessionScore = sessionScore,
             limit = limit,
         )
+    }
+
+    private fun queryByContextHashes(contextHashes: List<Long>): List<IndexedLine> {
+        return contextHashes
+            .filter { it != 0L }
+            .firstNotNullOfOrNull { hash ->
+                contextMap[hash]?.takeIf { it.isNotEmpty() }
+            }
+            ?: emptyList()
     }
 
     fun findFileRecord(path: String): FileRecord? = fileMap[path]

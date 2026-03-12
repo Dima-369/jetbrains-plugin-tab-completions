@@ -7,11 +7,15 @@ data class CursorContext(
     val fileExtension: String,
     val filePath: String,
     val projectBasePath: String?,
-    val contextHashes: List<Long>,
+    val prefixContextHashes: List<Long>,
+    val suffixContextHashes: List<Long>,
     val lineNumber: Int,
     val rawPrefixText: String,
     val rawSuffixText: String,
 ) {
+    val contextHashes: List<Long>
+        get() = prefixContextHashes + suffixContextHashes
+
     val contextHash: Long
-        get() = contextHashes.firstOrNull() ?: 0L
+        get() = prefixContextHashes.firstOrNull() ?: 0L
 }
