@@ -30,7 +30,8 @@ object FileRecordBuilder {
                 leadingWhitespace = originalLine.takeWhile { it == ' ' || it == '\t' },
                 sourceFilePath = path,
                 lineNumber = currentLineNumber,
-                contextHashes = ContextHash.forLineGraduated(rawLines, index),
+                prefixContextHashes = ContextHash.prefixHashesForLine(rawLines, index),
+                suffixContextHashes = ContextHash.suffixHashesForLine(rawLines, index),
             )
         }
 

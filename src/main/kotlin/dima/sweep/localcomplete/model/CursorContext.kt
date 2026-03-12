@@ -14,9 +14,6 @@ data class CursorContext(
     val rawSuffixText: String,
     val nextNonBlankLineNormalized: String = "",
 ) {
-    val contextHashes: List<Long>
-        get() = prefixContextHashes + suffixContextHashes
-
     val contextHash: Long
         get() = prefixContextHashes.firstOrNull() ?: 0L
 }

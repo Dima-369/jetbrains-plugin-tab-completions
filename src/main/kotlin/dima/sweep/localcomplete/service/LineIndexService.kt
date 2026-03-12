@@ -137,7 +137,7 @@ class LineIndexService {
     fun query(prefix: String, cursorContext: CursorContext, limit: Int = 5): List<RankedCompletion> {
         ensureLoadedInBackground()
         if (loading.get() || !LocalCompleteSettings.getInstance().enabled) return emptyList()
-        return lock.read { lineIndex.query(prefix, cursorContext, limit, sessionLineCache::score) }
+        return lock.read { lineIndex.query(prefix, cursorContext, limit, sessionLineCache::score, LocalCompleteSettings.getInstance().sessionScoreWeight.toDouble()) }
     }
 
     fun removeFile(path: String) {

@@ -12,7 +12,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
 object PersistenceManager {
-    private const val VERSION = 4
+    private const val VERSION = 5
     private val indexFile: Path = Path.of(PathManager.getSystemPath(), "local-line-complete", "index.bin")
 
     fun save(records: List<FileRecord>) {
@@ -30,8 +30,14 @@ object PersistenceManager {
                 for (line in record.lines) {
                     output.writeUTF(line.originalContent)
                     output.writeInt(line.lineNumber)
-                    output.writeInt(line.contextHashes.size)
-                    for (hash in line.contextHashes) {
+                    
+                    output.writeInt(line.prefixContextHashes.size)
+                    for (hash in line.prefixContextHashes) {
+                        output.writeLong(hash)
+                    }
+                    
+                    output.writeInt(line.suffixContextHashes.size)
+                    for (hash in line.suffixContextHashes) {
                         output.writeLong(hash)
                     }
                 }
@@ -55,15 +61,21 @@ object PersistenceManager {
                 val lines = List(input.readInt()) {
                     val originalContent = input.readUTF()
                     val lineNumber = input.readInt()
-                    val hashCount = input.readInt()
-                    val contextHashes = List(hashCount) { input.readLong() }
+                    
+                    val prefixHashCount = input.readInt()
+                    val prefixContextHashes = List(prefixHashCount) { input.readLong() }
+                    
+                    val suffixHashCount = input.readInt()
+                    val suffixContextHashes = List(suffixHashCount) { input.readLong() }
+                    
                     IndexedLine(
                         normalizedContent = originalContent.trim(),
                         originalContent = originalContent,
                         leadingWhitespace = originalContent.takeWhile { ch -> ch == ' ' || ch == '\t' },
                         sourceFilePath = absolutePath,
                         lineNumber = lineNumber,
-                        contextHashes = contextHashes,
+                        prefixContextHashes = prefixContextHashes,
+                        suffixContextHashes = suffixContextHashes,
                     )
                 }
                 FileRecord(absolutePath, extension, lastIndexedTimestamp, lines, sizeBytes)

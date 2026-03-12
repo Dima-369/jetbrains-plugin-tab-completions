@@ -15,6 +15,7 @@ class LocalCompleteSettings : PersistentStateComponent<LocalCompleteSettings.Set
         var minPrefixLength: Int = 1
         var enabled: Boolean = true
         var moveCaretDownOnTabAccept: Boolean = false
+        var sessionScoreWeight: Int = 25
     }
 
     private var state = SettingsState()
@@ -70,5 +71,11 @@ class LocalCompleteSettings : PersistentStateComponent<LocalCompleteSettings.Set
         get() = state.moveCaretDownOnTabAccept
         set(value) {
             state.moveCaretDownOnTabAccept = value
+        }
+
+    var sessionScoreWeight: Int
+        get() = state.sessionScoreWeight
+        set(value) {
+            state.sessionScoreWeight = value.coerceIn(0, 100)
         }
 }

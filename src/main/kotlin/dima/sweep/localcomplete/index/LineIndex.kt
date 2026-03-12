@@ -12,7 +12,8 @@ import java.util.TreeMap
 
 class LineIndex {
     private val normalizedPrefixMap = TreeMap<String, MutableList<IndexedLine>>()
-    private val contextMap = HashMap<Long, MutableList<IndexedLine>>()
+    private val prefixContextMap = HashMap<Long, MutableList<IndexedLine>>()
+    private val suffixContextMap = HashMap<Long, MutableList<IndexedLine>>()
     private val fileMap = LinkedHashMap<String, FileRecord>()
 
     fun indexFile(
@@ -49,9 +50,14 @@ class LineIndex {
         record.lines.forEach { line ->
             normalizedPrefixMap.getOrPut(LinePrefixMatcher.normalizeForLookup(line.normalizedContent)) { mutableListOf() }
                 .add(line)
-            for (hash in line.contextHashes) {
+            for (hash in line.prefixContextHashes) {
                 if (hash != 0L) {
-                    contextMap.getOrPut(hash) { mutableListOf() }.add(line)
+                    prefixContextMap.getOrPut(hash) { mutableListOf() }.add(line)
+                }
+            }
+            for (hash in line.suffixContextHashes) {
+                if (hash != 0L) {
+                    suffixContextMap.getOrPut(hash) { mutableListOf() }.add(line)
                 }
             }
         }
@@ -69,14 +75,22 @@ class LineIndex {
                 }
             }
 
-            for (hash in line.contextHashes) {
+            for (hash in line.prefixContextHashes) {
                 if (hash != 0L) {
-                    val contextBucket = contextMap[hash]
+                    val contextBucket = prefixContextMap[hash]
                     if (contextBucket != null) {
                         contextBucket.removeIf { it.sourceFilePath == path && it.lineNumber == line.lineNumber }
-                        if (contextBucket.isEmpty()) {
-                            contextMap.remove(hash)
-                        }
+                        if (contextBucket.isEmpty()) prefixContextMap.remove(hash)
+                    }
+                }
+            }
+            
+            for (hash in line.suffixContextHashes) {
+                if (hash != 0L) {
+                    val contextBucket = suffixContextMap[hash]
+                    if (contextBucket != null) {
+                        contextBucket.removeIf { it.sourceFilePath == path && it.lineNumber == line.lineNumber }
+                        if (contextBucket.isEmpty()) suffixContextMap.remove(hash)
                     }
                 }
             }
@@ -88,14 +102,15 @@ class LineIndex {
         cursorContext: CursorContext,
         limit: Int,
         sessionScore: (IndexedLine) -> Double = { 0.0 },
+        sessionScoreWeight: Double = 25.0,
     ): List<RankedCompletion> {
         val normalizedLookupPrefix = LinePrefixMatcher.normalizeForLookup(prefix)
         val candidates = if (normalizedLookupPrefix.isBlank()) {
-            val prefixCandidates = queryByContextHashes(cursorContext.prefixContextHashes)
+            val prefixCandidates = queryByHashes(cursorContext.prefixContextHashes, prefixContextMap)
             val prefixKeys = prefixCandidates
                 .map { indexedLineKey(it) }
                 .toHashSet()
-            val suffixCandidates = queryByContextHashes(cursorContext.suffixContextHashes)
+            val suffixCandidates = queryByHashes(cursorContext.suffixContextHashes, suffixContextMap)
                 .filterNot { indexedLineKey(it) in prefixKeys }
 
             (prefixCandidates + suffixCandidates).asSequence()
@@ -120,15 +135,16 @@ class LineIndex {
             fileRecordByPath = { fileMap[it] },
             sessionScore = sessionScore,
             limit = limit,
+            sessionScoreWeight = sessionScoreWeight,
         )
     }
 
-    private fun queryByContextHashes(contextHashes: List<Long>): List<IndexedLine> {
+    private fun queryByHashes(contextHashes: List<Long>, map: HashMap<Long, MutableList<IndexedLine>>): List<IndexedLine> {
         val seenKeys = HashSet<String>()
         return contextHashes
             .asSequence()
             .filter { it != 0L }
-            .flatMap { hash -> contextMap[hash].orEmpty().asSequence() }
+            .flatMap { hash -> map[hash].orEmpty().asSequence() }
             .filter { seenKeys.add(indexedLineKey(it)) }
             .toList()
     }
@@ -156,7 +172,8 @@ class LineIndex {
 
     fun clear() {
         normalizedPrefixMap.clear()
-        contextMap.clear()
+        prefixContextMap.clear()
+        suffixContextMap.clear()
         fileMap.clear()
     }
 }

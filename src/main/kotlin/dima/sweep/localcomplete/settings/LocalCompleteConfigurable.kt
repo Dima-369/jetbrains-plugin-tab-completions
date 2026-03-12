@@ -41,5 +41,13 @@ class LocalCompleteConfigurable : BoundConfigurable("Local Line Complete") {
             intTextField(1..50)
                 .bindIntText(settings::minPrefixLength)
         }
+        row("Session score weight (0-100, default 25)") {
+            intTextField(0..100)
+                .comment("Higher values favor recently edited lines. 25 = balanced, 50+ = strongly prefers recent edits")
+                .bindIntText(
+                    getter = { settings.sessionScoreWeight },
+                    setter = { settings.sessionScoreWeight = it },
+                )
+        }
     }
 }

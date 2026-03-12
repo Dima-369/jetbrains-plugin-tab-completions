@@ -17,6 +17,7 @@ object CompletionRanker {
         fileRecordByPath: (String) -> FileRecord?,
         sessionScore: (IndexedLine) -> Double,
         limit: Int,
+        sessionScoreWeight: Double = 25.0,
     ): List<RankedCompletion> {
         val timestamps = fileRecords.map { it.lastIndexedTimestamp }
         val oldest = timestamps.minOrNull() ?: 0L
@@ -34,7 +35,7 @@ object CompletionRanker {
                     val fileRecord = fileRecordByPath(candidate.sourceFilePath) ?: return@candidateLoop null
                     RankedCompletion(
                         candidate,
-                        score(candidate, fileRecord, cursorContext, oldest, newest, frequency, sessionScore(candidate)),
+                        score(candidate, fileRecord, cursorContext, oldest, newest, frequency, sessionScore(candidate), sessionScoreWeight),
                     )
                 }.maxByOrNull { it.score }
             }
@@ -51,14 +52,17 @@ object CompletionRanker {
         newest: Long,
         frequency: Int,
         sessionScore: Double,
+        sessionScoreWeight: Double = 25.0,
     ): Double {
         val contextSimilarity = when {
             candidate.contextHash != 0L && candidate.contextHash == cursorContext.contextHash -> 1.0
-            candidate.contextHashes.any { hash -> hash != 0L && cursorContext.prefixContextHashes.contains(hash) } -> 0.5
+            // ONLY compare candidate's PREFIX with cursor's PREFIX
+            candidate.prefixContextHashes.any { hash -> hash != 0L && cursorContext.prefixContextHashes.contains(hash) } -> 0.5
             else -> 0.0
         }
         val suffixContextBonus = when {
-            candidate.contextHashes.any { hash -> hash != 0L && cursorContext.suffixContextHashes.contains(hash) } -> 0.3
+            // ONLY compare candidate's SUFFIX with cursor's SUFFIX
+            candidate.suffixContextHashes.any { hash -> hash != 0L && cursorContext.suffixContextHashes.contains(hash) } -> 0.3
             else -> 0.0
         }
         val extensionMatch = if (fileRecord.extension == cursorContext.fileExtension) 1.0 else 0.0
@@ -80,7 +84,7 @@ object CompletionRanker {
             (15.0 * exactCaseMatch) +
             (10.0 * recency) +
             (10.0 * proximity) +
-            (50.0 * sessionScore) +
+            (sessionScoreWeight * sessionScore) +
             (5.0 * suffixContextBonus) +
             (5.0 * contentQuality) +
             (5.0 * freqScore) +
