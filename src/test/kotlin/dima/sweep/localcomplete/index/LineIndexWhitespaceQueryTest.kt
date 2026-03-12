@@ -1,6 +1,7 @@
 package dima.sweep.localcomplete.index
 
 import dima.sweep.localcomplete.model.CursorContext
+import dima.sweep.localcomplete.model.CompletionContextKind
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -22,6 +23,7 @@ class LineIndexWhitespaceQueryTest {
             cursorContext = CursorContext(
                 normalizedPrefix = "val x=",
                 leadingWhitespace = "",
+                completionContextKind = CompletionContextKind.CODE,
                 fileExtension = "kt",
                 filePath = "/tmp/current.kt",
                 projectBasePath = "/tmp",

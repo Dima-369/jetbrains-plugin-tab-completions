@@ -3,6 +3,7 @@ package dima.sweep.localcomplete.model
 data class CursorContext(
     val normalizedPrefix: String,
     val leadingWhitespace: String,
+    val completionContextKind: CompletionContextKind,
     val fileExtension: String,
     val filePath: String,
     val projectBasePath: String?,

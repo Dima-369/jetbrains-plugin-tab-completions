@@ -18,9 +18,13 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.openapi.editor.actionSystem.EditorActionManager
+import com.intellij.psi.PsiComment
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.util.PsiTreeUtil
 import dima.sweep.localcomplete.LocalCompleteKeys
 import dima.sweep.localcomplete.index.ContextHash
 import dima.sweep.localcomplete.index.LinePrefixMatcher
+import dima.sweep.localcomplete.model.CompletionContextKind
 import dima.sweep.localcomplete.model.CursorContext
 import dima.sweep.localcomplete.model.IndexedLine
 import dima.sweep.localcomplete.service.LineIndexService
@@ -81,6 +85,8 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             val fullText = document.text
             val offset = request.endOffset
             val file = FileDocumentManager.getInstance().getFile(document) ?: return@readAction null
+            val completionContextKind = detectCompletionContext(request, document, offset)
+            if (completionContextKind == CompletionContextKind.STRING) return@readAction null
             val lineIndex = document.getLineNumber(offset)
             val lineStart = document.getLineStartOffset(lineIndex)
             val lineEnd = document.getLineEndOffset(lineIndex)
@@ -100,6 +106,7 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 CursorContext(
                 normalizedPrefix = normalizedPrefix,
                 leadingWhitespace = prefixText.takeWhile { it == ' ' || it == '\t' },
+                completionContextKind = completionContextKind,
                 fileExtension = file.extension.orEmpty(),
                 filePath = file.path,
                 projectBasePath = request.editor.project?.basePath,
@@ -135,5 +142,30 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
 
         val remaining = reindentedLine.substring(prefixMatchEnd)
         return LinePrefixMatcher.removeSuffixOverlap(remaining, context.rawSuffixText)
+    }
+
+    private fun detectCompletionContext(
+        request: InlineCompletionRequest,
+        document: com.intellij.openapi.editor.Document,
+        offset: Int,
+    ): CompletionContextKind {
+        val project = request.editor.project ?: return CompletionContextKind.UNKNOWN
+        val psiFile = PsiDocumentManager.getInstance(project).getPsiFile(document) ?: return CompletionContextKind.UNKNOWN
+        val safeOffset = when {
+            offset < document.textLength -> offset
+            offset > 0 -> offset - 1
+            else -> 0
+        }
+        val elementAtCaret = psiFile.findElementAt(safeOffset) ?: return CompletionContextKind.UNKNOWN
+        if (elementAtCaret is PsiComment || PsiTreeUtil.getParentOfType(elementAtCaret, PsiComment::class.java, false) != null) {
+            return CompletionContextKind.COMMENT
+        }
+
+        val elementType = elementAtCaret.node?.elementType?.toString()?.uppercase().orEmpty()
+        return when {
+            "COMMENT" in elementType -> CompletionContextKind.COMMENT
+            "STRING" in elementType || "CHARACTER" in elementType -> CompletionContextKind.STRING
+            else -> CompletionContextKind.CODE
+        }
     }
 }

@@ -115,7 +115,9 @@ class LineIndex {
                 .values
                 .asSequence()
                 .flatten()
-        }.filterNot { it.sourceFilePath == cursorContext.filePath && it.lineNumber == cursorContext.lineNumber }
+        }
+            .filterNot { it.sourceFilePath == cursorContext.filePath && it.lineNumber == cursorContext.lineNumber }
+            .filter { cursorContext.completionContextKind.allows(it) }
 
         return CompletionRanker.rank(
             candidates = candidates,
