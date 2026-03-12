@@ -196,9 +196,11 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             activeLineNumbers = snapshot.activeLineNumbers,
         )
 
+        val minConfidence = minimumConfidence(cursorContext)
         val completionText = LineIndexService.getInstance()
             .query(cursorContext.normalizedPrefix, cursorContext)
             .firstNotNullOfOrNull { rankedCompletion ->
+                if (rankedCompletion.score < minConfidence) return@firstNotNullOfOrNull null
                 buildCompletionText(rankedCompletion.indexedLine, cursorContext)
                     ?.takeIf { it.isNotEmpty() }
             } ?: return InlineCompletionSuggestion.Empty
@@ -308,6 +310,15 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             "COMMENT" in elementType -> CompletionContextKind.COMMENT
             "STRING" in elementType || "CHARACTER" in elementType -> CompletionContextKind.STRING
             else -> CompletionContextKind.CODE
+        }
+    }
+
+    private fun minimumConfidence(context: CursorContext): Double {
+        val prefixLength = LinePrefixMatcher.normalizeForLookup(context.normalizedPrefix).length
+        return when {
+            prefixLength == 0 -> 35.0   // blank line: need strong context match
+            prefixLength <= 3 -> 20.0   // short prefix: still ambiguous
+            else -> 12.0               // longer prefix: the prefix itself is a strong filter
         }
     }
 }
