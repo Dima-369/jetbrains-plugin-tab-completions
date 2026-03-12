@@ -128,7 +128,7 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
             documentText,
             snapshot.fileExtension,
             trackSessionChanges = true,
-            activeLineNumber = snapshot.lineNumber,
+            activeLineNumbers = setOf(snapshot.lineNumber),
         )
 
         val completionText = LineIndexService.getInstance()

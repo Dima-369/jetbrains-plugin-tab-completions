@@ -11,12 +11,12 @@ object FileRecordBuilder {
         timestamp: Long,
         sizeBytes: Long,
         maxLineLength: Int,
-        activeLineNumber: Int? = null,
+        activeLineNumbers: Set<Int> = emptySet(),
     ): FileRecord {
         val rawLines = content.split('\n')
         val indexedLines = rawLines.mapIndexedNotNull { index, rawLine ->
             val currentLineNumber = index + 1
-            if (currentLineNumber == activeLineNumber) return@mapIndexedNotNull null
+            if (currentLineNumber in activeLineNumbers) return@mapIndexedNotNull null
 
             val originalLine = rawLine.removeSuffix("\r")
             val normalizedContent = originalLine.trim()

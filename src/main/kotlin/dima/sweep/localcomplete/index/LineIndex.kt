@@ -22,7 +22,7 @@ class LineIndex {
         timestamp: Long,
         sizeBytes: Long,
         maxLineLength: Int,
-        activeLineNumber: Int? = null,
+        activeLineNumbers: Set<Int> = emptySet(),
     ) {
         removeFile(path)
         val fileRecord = FileRecordBuilder.build(
@@ -32,7 +32,7 @@ class LineIndex {
             timestamp = timestamp,
             sizeBytes = sizeBytes,
             maxLineLength = maxLineLength,
-            activeLineNumber = activeLineNumber,
+            activeLineNumbers = activeLineNumbers,
         )
         loadFileRecord(fileRecord)
     }

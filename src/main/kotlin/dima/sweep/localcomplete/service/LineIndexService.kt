@@ -9,15 +9,11 @@ import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.LocalFileSystem
-import dima.sweep.localcomplete.index.ContextHash
 import dima.sweep.localcomplete.index.FileRecordBuilder
-import dima.sweep.localcomplete.index.LineFilter
 import com.intellij.util.concurrency.AppExecutorUtil
 import dima.sweep.localcomplete.index.LineIndex
 import dima.sweep.localcomplete.model.CursorContext
-import dima.sweep.localcomplete.model.FileRecord
 import dima.sweep.localcomplete.model.IndexStats
-import dima.sweep.localcomplete.model.IndexedLine
 import dima.sweep.localcomplete.model.RankedCompletion
 import dima.sweep.localcomplete.settings.LocalCompleteSettings
 import java.util.ArrayList
@@ -39,6 +35,13 @@ class LineIndexService {
     private val dirtyDocumentPaths = ConcurrentHashMap.newKeySet<String>()
     private val documentListenerRegistered = AtomicBoolean(false)
     private val sessionLineCache = SessionLineCache()
+
+    private data class DirtyFileData(
+        val path: String,
+        val text: String,
+        val extension: String,
+        val activeLineNumbers: Set<Int>,
+    )
 
     init {
         val scheduler = AppExecutorUtil.getAppScheduledExecutorService()
@@ -95,7 +98,7 @@ class LineIndexService {
         content: String,
         extension: String,
         trackSessionChanges: Boolean = false,
-        activeLineNumber: Int? = null,
+        activeLineNumbers: Set<Int> = emptySet(),
     ) {
         ensureLoadedInBackground()
         dirtyDocumentPaths.remove(path)
@@ -117,7 +120,7 @@ class LineIndexService {
             timestamp = System.currentTimeMillis(),
             sizeBytes = sizeBytes,
             maxLineLength = settings.skipLongerColumnLines,
-            activeLineNumber = activeLineNumber,
+            activeLineNumbers = activeLineNumbers,
         )
 
         lock.write {
@@ -169,20 +172,36 @@ class LineIndexService {
         val paths = ArrayList(dirtyDocumentPaths)
         paths.forEach(dirtyDocumentPaths::remove)
 
-        val fileData = ApplicationManager.getApplication().runReadAction<List<Triple<String, String, String>>> {
+        val fileData = ApplicationManager.getApplication().runReadAction<List<DirtyFileData>> {
             paths.mapNotNull { path ->
                 val virtualFile = LocalFileSystem.getInstance().findFileByPath(path) ?: return@mapNotNull null
                 if (virtualFile.fileType.isBinary) return@mapNotNull null
                 val document = FileDocumentManager.getInstance().getDocument(virtualFile) ?: return@mapNotNull null
-                Triple(path, document.text, virtualFile.extension.orEmpty())
+                val activeLineNumbers = EditorFactory.getInstance().getEditors(document)
+                    .flatMap { editor -> editor.caretModel.allCarets }
+                    .map { caret -> caret.logicalPosition.line + 1 }
+                    .toSet()
+
+                DirtyFileData(
+                    path = path,
+                    text = document.text,
+                    extension = virtualFile.extension.orEmpty(),
+                    activeLineNumbers = activeLineNumbers,
+                )
             }
         }
 
-        fileData.forEach { (path, text, extension) ->
+        fileData.forEach { data ->
             try {
-                indexFile(path, text, extension, trackSessionChanges = true)
+                indexFile(
+                    path = data.path,
+                    content = data.text,
+                    extension = data.extension,
+                    trackSessionChanges = true,
+                    activeLineNumbers = data.activeLineNumbers,
+                )
             } catch (t: Throwable) {
-                logger.warn("Failed to reindex dirty document: $path", t)
+                logger.warn("Failed to reindex dirty document: ${data.path}", t)
             }
         }
     }
