@@ -212,20 +212,35 @@ class LineIndex {
 
     companion object {
         private const val TOKEN_FALLBACK_THRESHOLD = 5
-        private const val MIN_TOKEN_LENGTH = 4
-        private val TOKEN_REGEX = Regex("[a-zA-Z]+")
+        private const val MIN_TOKEN_LENGTH = 3
+        private val WORD_SPLIT_REGEX = Regex("[^a-zA-Z0-9]+")
 
         fun extractTokens(content: String): Set<String> {
-            return TOKEN_REGEX.findAll(content)
-                .map { it.value.lowercase() }
+            val words = content.split(WORD_SPLIT_REGEX)
+            return words.asSequence()
+                .flatMap { splitCamelCase(it) }
+                .map { it.lowercase() }
                 .filter { it.length >= MIN_TOKEN_LENGTH }
                 .toSet()
         }
 
+        private fun splitCamelCase(word: String): Sequence<String> = sequence {
+            yield(word) // keep the full word too
+            var start = 0
+            for (i in 1 until word.length) {
+                if (word[i].isUpperCase() && !word[i - 1].isUpperCase()) {
+                    if (i - start >= MIN_TOKEN_LENGTH) yield(word.substring(start, i))
+                    start = i
+                }
+            }
+            if (word.length - start >= MIN_TOKEN_LENGTH) yield(word.substring(start))
+        }
+
         fun extractLastToken(normalizedPrefix: String): String? {
-            val match = TOKEN_REGEX.findAll(normalizedPrefix).lastOrNull() ?: return null
-            val token = match.value.lowercase()
-            return if (token.length >= MIN_TOKEN_LENGTH) token else null
+            val tokens = extractTokens(normalizedPrefix)
+            if (tokens.isEmpty()) return null
+            // Find the token whose last occurrence in the prefix is latest
+            return tokens.maxByOrNull { normalizedPrefix.lowercase().lastIndexOf(it) }
         }
     }
 }
