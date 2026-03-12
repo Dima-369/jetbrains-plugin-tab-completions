@@ -203,9 +203,15 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
                 if (rankedCompletion.score < minConfidence) return@firstNotNullOfOrNull null
                 buildCompletionText(rankedCompletion.indexedLine, cursorContext)
                     ?.takeIf { it.isNotEmpty() }
-            } ?: return InlineCompletionSuggestion.Empty
+            } ?: run {
+                lastSuggestion = null
+                return InlineCompletionSuggestion.Empty
+            }
         val truncatedCompletion = smartTruncate(completionText)
-        if (truncatedCompletion.isBlank()) return InlineCompletionSuggestion.Empty
+        if (truncatedCompletion.isBlank()) {
+            lastSuggestion = null
+            return InlineCompletionSuggestion.Empty
+        }
 
         // Update cache with the new suggestion
         lastSuggestion = StableSuggestion(
@@ -326,23 +332,24 @@ class LocalLineCompletionProvider : DebouncedInlineCompletionProvider() {
     private fun smartTruncate(completion: String): String {
         if (completion.length <= 20) return completion
 
-        // Find the last position where brackets are balanced
         var bestCut = completion.length
         var round = 0
         var square = 0
+        var curly = 0
         var lastBalancedAfterClose = -1
 
         for (i in completion.indices) {
             when (completion[i]) {
                 '(' -> round++
-                ')' -> { round--; if (round == 0 && square == 0) lastBalancedAfterClose = i + 1 }
+                ')' -> { round--; if (round == 0 && square == 0 && curly == 0) lastBalancedAfterClose = i + 1 }
                 '[' -> square++
-                ']' -> { square--; if (round == 0 && square == 0) lastBalancedAfterClose = i + 1 }
+                ']' -> { square--; if (round == 0 && square == 0 && curly == 0) lastBalancedAfterClose = i + 1 }
+                '{' -> curly++
+                '}' -> { curly--; if (round == 0 && square == 0 && curly == 0) lastBalancedAfterClose = i + 1 }
             }
         }
 
-        // If the completion ends unbalanced, cut at the last balanced point
-        if ((round != 0 || square != 0) && lastBalancedAfterClose > 0) {
+        if ((round != 0 || square != 0 || curly != 0) && lastBalancedAfterClose > 0) {
             bestCut = lastBalancedAfterClose
         }
 
