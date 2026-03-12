@@ -48,6 +48,16 @@ class CompletionActionListener : AnActionListener {
             IdeActions.ACTION_EDITOR_DELETE,
             IdeActions.ACTION_EDITOR_DELETE_TO_WORD_START,
             IdeActions.ACTION_EDITOR_DELETE_TO_WORD_END,
+            IdeActions.ACTION_EDITOR_MOVE_CARET_LEFT,
+            IdeActions.ACTION_EDITOR_MOVE_CARET_RIGHT,
+            IdeActions.ACTION_EDITOR_MOVE_CARET_UP,
+            IdeActions.ACTION_EDITOR_MOVE_CARET_DOWN,
+            IdeActions.ACTION_EDITOR_MOVE_CARET_PAGE_UP,
+            IdeActions.ACTION_EDITOR_MOVE_CARET_PAGE_DOWN,
+            IdeActions.ACTION_EDITOR_MOVE_LINE_START,
+            IdeActions.ACTION_EDITOR_MOVE_LINE_END,
+            IdeActions.ACTION_EDITOR_NEXT_WORD,
+            IdeActions.ACTION_EDITOR_PREVIOUS_WORD,
         )
 
         private val tabAcceptActionIds = setOf(
