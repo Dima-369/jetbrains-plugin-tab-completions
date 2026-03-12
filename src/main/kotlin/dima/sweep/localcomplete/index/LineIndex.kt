@@ -61,8 +61,11 @@ class LineIndex {
                     suffixContextMap.getOrPut(hash) { mutableListOf() }.add(line)
                 }
             }
-            for (token in extractTokens(line.normalizedContent)) {
-                tokenMap.getOrPut(token) { mutableListOf() }.add(line)
+            val tokens = extractTokens(line.normalizedContent)
+            if (tokens.size <= MAX_TOKENS_PER_LINE) {
+                for (token in tokens) {
+                    tokenMap.getOrPut(token) { mutableListOf() }.add(line)
+                }
             }
         }
     }
@@ -213,6 +216,7 @@ class LineIndex {
     companion object {
         private const val TOKEN_FALLBACK_THRESHOLD = 5
         private const val MIN_TOKEN_LENGTH = 3
+        private const val MAX_TOKENS_PER_LINE = 12
         private val WORD_SPLIT_REGEX = Regex("[^a-zA-Z0-9]+")
 
         fun extractTokens(content: String): Set<String> {
