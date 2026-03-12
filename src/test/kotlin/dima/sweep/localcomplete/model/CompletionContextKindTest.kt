@@ -2,6 +2,7 @@ package dima.sweep.localcomplete.model
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class CompletionContextKindTest {
@@ -22,5 +23,12 @@ class CompletionContextKindTest {
         assertTrue(CompletionContextKind.COMMENT.allows(commentLine))
         assertFalse(CompletionContextKind.COMMENT.allows(codeLine))
         assertFalse(CompletionContextKind.STRING.allows(commentLine))
+    }
+
+    @Test
+    fun `star-prefixed arithmetic is not mistaken for a comment`() {
+        assertEquals(CompletionContextKind.CODE, CompletionContextKind.classifyLine("* 5 / 2"))
+        assertEquals(CompletionContextKind.COMMENT, CompletionContextKind.classifyLine("* docs"))
+        assertEquals(CompletionContextKind.COMMENT, CompletionContextKind.classifyLine("*/"))
     }
 }

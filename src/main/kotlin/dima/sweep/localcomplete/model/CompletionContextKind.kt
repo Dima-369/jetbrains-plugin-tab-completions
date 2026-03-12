@@ -19,10 +19,19 @@ enum class CompletionContextKind {
         fun classifyLine(content: String): CompletionContextKind {
             val trimmed = content.trimStart()
             return when {
-                trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*/") || trimmed.startsWith("*") -> COMMENT
+                trimmed.startsWith("//") ||
+                    trimmed.startsWith("/*") ||
+                    trimmed.startsWith("*/") ||
+                    isCommentContinuation(trimmed) -> COMMENT
                 trimmed.startsWith("\"") || trimmed.startsWith("'") -> STRING
                 else -> CODE
             }
+        }
+
+        private fun isCommentContinuation(trimmed: String): Boolean {
+            if (!trimmed.startsWith("* ")) return false
+            val firstContentChar = trimmed.drop(2).firstOrNull { !it.isWhitespace() } ?: return false
+            return !firstContentChar.isDigit() && firstContentChar !in "+-*/%=&|<>!?"
         }
     }
 }
