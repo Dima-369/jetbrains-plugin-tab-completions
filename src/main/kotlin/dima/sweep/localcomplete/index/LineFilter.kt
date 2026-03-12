@@ -16,14 +16,17 @@ object LineFilter {
         val candidateBalance = bracketBalance(content)
         if (candidateBalance.isBalanced()) return 1.0
 
-        val combinedBalance = candidateBalance + bracketBalance(rawSuffixText)
+        val combinedBalance = bracketBalance(content + rawSuffixText)
         return if (combinedBalance.isBalanced()) 1.0 else 0.5
     }
 
     private fun bracketBalance(content: String): BracketBalance {
         var curly = 0
+        var minCurly = 0
         var round = 0
+        var minRound = 0
         var square = 0
+        var minSquare = 0
         for (character in content) {
             when (character) {
                 '{' -> curly++
@@ -33,23 +36,24 @@ object LineFilter {
                 '[' -> square++
                 ']' -> square--
             }
+            minCurly = minOf(minCurly, curly)
+            minRound = minOf(minRound, round)
+            minSquare = minOf(minSquare, square)
         }
-        return BracketBalance(curly, round, square)
+        return BracketBalance(curly, minCurly, round, minRound, square, minSquare)
     }
 
     private data class BracketBalance(
         val curly: Int,
+        val minCurly: Int,
         val round: Int,
+        val minRound: Int,
         val square: Int,
+        val minSquare: Int,
     ) {
-        fun isBalanced(): Boolean = curly == 0 && round == 0 && square == 0
-
-        operator fun plus(other: BracketBalance): BracketBalance {
-            return BracketBalance(
-                curly = curly + other.curly,
-                round = round + other.round,
-                square = square + other.square,
-            )
+        fun isBalanced(): Boolean {
+            return curly == 0 && round == 0 && square == 0 &&
+                minCurly >= 0 && minRound >= 0 && minSquare >= 0
         }
     }
 }

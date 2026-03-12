@@ -8,6 +8,7 @@ class LineFilterTest {
     fun `penalizes unbalanced candidates`() {
         assertEquals(0.5, LineFilter.bracketBalancePenalty("if (user != null) {", ""), 0.0)
         assertEquals(0.5, LineFilter.bracketBalancePenalty("items.map(", ""), 0.0)
+        assertEquals(0.5, LineFilter.bracketBalancePenalty("} else {", "}"), 0.0)
     }
 
     @Test
