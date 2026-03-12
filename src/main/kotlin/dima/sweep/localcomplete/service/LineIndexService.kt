@@ -10,6 +10,7 @@ import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import dima.sweep.localcomplete.index.ContextHash
+import dima.sweep.localcomplete.index.FileRecordBuilder
 import dima.sweep.localcomplete.index.LineFilter
 import com.intellij.util.concurrency.AppExecutorUtil
 import dima.sweep.localcomplete.index.LineIndex
@@ -89,7 +90,13 @@ class LineIndexService {
         }
     }
 
-    fun indexFile(path: String, content: String, extension: String, trackSessionChanges: Boolean = false) {
+    fun indexFile(
+        path: String,
+        content: String,
+        extension: String,
+        trackSessionChanges: Boolean = false,
+        activeLineNumber: Int? = null,
+    ) {
         ensureLoadedInBackground()
         dirtyDocumentPaths.remove(path)
         val settings = LocalCompleteSettings.getInstance()
@@ -103,12 +110,14 @@ class LineIndexService {
             return
         }
 
-        val fileRecord = buildFileRecord(
+        val fileRecord = FileRecordBuilder.build(
             path = path,
             content = content,
             extension = extension,
+            timestamp = System.currentTimeMillis(),
             sizeBytes = sizeBytes,
             maxLineLength = settings.skipLongerColumnLines,
+            activeLineNumber = activeLineNumber,
         )
 
         lock.write {
@@ -191,37 +200,4 @@ class LineIndexService {
         }
     }
 
-    private fun buildFileRecord(
-        path: String,
-        content: String,
-        extension: String,
-        sizeBytes: Long,
-        maxLineLength: Int,
-    ): FileRecord {
-        val rawLines = content.split('\n')
-        val indexedLines = rawLines.mapIndexedNotNull { index, rawLine ->
-            val originalLine = rawLine.removeSuffix("\r")
-            val normalizedContent = originalLine.trim()
-            if (LineFilter.shouldSkip(normalizedContent, originalLine.length, maxLineLength)) {
-                return@mapIndexedNotNull null
-            }
-
-            IndexedLine(
-                normalizedContent = normalizedContent,
-                originalContent = originalLine,
-                leadingWhitespace = originalLine.takeWhile { it == ' ' || it == '\t' },
-                sourceFilePath = path,
-                lineNumber = index + 1,
-                contextHashes = ContextHash.forLineGraduated(rawLines, index),
-            )
-        }
-
-        return FileRecord(
-            absolutePath = path,
-            extension = extension,
-            lastIndexedTimestamp = System.currentTimeMillis(),
-            lines = indexedLines,
-            sizeBytes = sizeBytes,
-        )
-    }
 }

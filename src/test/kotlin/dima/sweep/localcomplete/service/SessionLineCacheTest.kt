@@ -36,6 +36,17 @@ class SessionLineCacheTest {
         assertTrue(cache.score(line("val c = 3", 3), now = 300L) > 0.0)
     }
 
+    @Test
+    fun `omitted active lines are not remembered as fresh session content`() {
+        val cache = SessionLineCache(ttlMillis = TimeUnit.MINUTES.toMillis(5), maxEntries = 8)
+        val previous = listOf(line("val before = 1", 1), line("val partial =", 2))
+        val current = listOf(line("val before = 1", 1))
+
+        cache.rememberUpdatedLines(current, previous, now = 1_000L)
+
+        assertEquals(0.0, cache.score(line("val partial =", 2), now = 1_100L), 0.0)
+    }
+
     private fun line(content: String, lineNumber: Int): IndexedLine {
         return IndexedLine(content.trim(), content, "", "/tmp/current.kt", lineNumber, listOf(0L))
     }

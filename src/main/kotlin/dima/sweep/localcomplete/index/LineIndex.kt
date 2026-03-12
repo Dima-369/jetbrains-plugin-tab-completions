@@ -15,33 +15,24 @@ class LineIndex {
     private val contextMap = HashMap<Long, MutableList<IndexedLine>>()
     private val fileMap = LinkedHashMap<String, FileRecord>()
 
-    fun indexFile(path: String, content: String, extension: String, timestamp: Long, sizeBytes: Long, maxLineLength: Int) {
+    fun indexFile(
+        path: String,
+        content: String,
+        extension: String,
+        timestamp: Long,
+        sizeBytes: Long,
+        maxLineLength: Int,
+        activeLineNumber: Int? = null,
+    ) {
         removeFile(path)
-
-        val rawLines = content.split('\n')
-        val indexedLines = rawLines.mapIndexedNotNull { index, rawLine ->
-            val originalLine = rawLine.removeSuffix("\r")
-            val normalizedContent = originalLine.trim()
-            if (LineFilter.shouldSkip(normalizedContent, originalLine.length, maxLineLength)) {
-                return@mapIndexedNotNull null
-            }
-
-            IndexedLine(
-                normalizedContent = normalizedContent,
-                originalContent = originalLine,
-                leadingWhitespace = originalLine.takeWhile { it == ' ' || it == '\t' },
-                sourceFilePath = path,
-                lineNumber = index + 1,
-                contextHashes = ContextHash.forLineGraduated(rawLines, index),
-            )
-        }
-
-        val fileRecord = FileRecord(
-            absolutePath = path,
+        val fileRecord = FileRecordBuilder.build(
+            path = path,
+            content = content,
             extension = extension,
-            lastIndexedTimestamp = timestamp,
-            lines = indexedLines,
+            timestamp = timestamp,
             sizeBytes = sizeBytes,
+            maxLineLength = maxLineLength,
+            activeLineNumber = activeLineNumber,
         )
         loadFileRecord(fileRecord)
     }
