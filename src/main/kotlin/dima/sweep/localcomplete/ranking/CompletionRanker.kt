@@ -176,7 +176,9 @@ object CompletionRanker {
     private fun proximity(candidate: IndexedLine, cursorContext: CursorContext): Double {
         if (candidate.sourceFilePath == cursorContext.filePath) {
             val distance = abs(candidate.lineNumber - cursorContext.lineNumber)
-            return 0.7 + 0.3 / (1.0 + distance / 20.0)
+            val above = candidate.lineNumber < cursorContext.lineNumber
+            val directionBonus = if (above) 0.05 else 0.0
+            return 0.7 + directionBonus + 0.25 / (1.0 + distance / 20.0)
         }
 
         val candidateDir = candidate.sourceFilePath.substringBeforeLast('/', missingDelimiterValue = "")
