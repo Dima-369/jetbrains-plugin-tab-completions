@@ -131,15 +131,12 @@ object CompletionRanker {
         return if (candidate.originalContent.trimStart().startsWith(trimmedPrefix)) 1.0 else 0.0
     }
 
-    private fun frequencyScore(frequency: Int): Double {
-        return when {
-            frequency <= 0 -> 0.0
-            frequency == 1 -> 0.9
-            frequency <= 5 -> 1.0
-            frequency <= 10 -> 0.7
-            frequency <= 25 -> 0.4
-            else -> 0.15
-        }
+    private fun frequencyScore(frequency: Int): Double = when {
+        frequency <= 0 -> 0.0
+        frequency <= 3 -> 1.0
+        frequency <= 15 -> 0.85
+        frequency <= 50 -> 0.6
+        else -> 0.3
     }
 
     private fun contentQuality(content: String): Double {
