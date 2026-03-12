@@ -74,6 +74,7 @@ object CompletionRanker {
         val contentQuality = contentQuality(candidate.normalizedContent)
         val bracketPenalty = bracketBalanceWithPrefix(candidate, cursorContext)
         val lengthPenalty = lengthPenalty(candidate.normalizedContent.length)
+        val indentationMatch = indentationMatch(candidate, cursorContext)
 
         return ((30.0 * contextSimilarity) +
             (25.0 * prefixRatio) +
@@ -84,7 +85,8 @@ object CompletionRanker {
             (5.0 * suffixContextBonus) +
             (5.0 * contentQuality) +
             (5.0 * freqScore) +
-            (3.0 * extensionMatch)) * bracketPenalty * lengthPenalty
+            (3.0 * extensionMatch) +
+            (8.0 * indentationMatch)) * bracketPenalty * lengthPenalty
     }
 
     private fun contextSimilarityScore(candidate: IndexedLine, cursorContext: CursorContext): Double {
@@ -144,6 +146,19 @@ object CompletionRanker {
         val alphanumericCount = content.count { it.isLetterOrDigit() }
         return alphanumericCount.toDouble() / content.length.toDouble()
     }
+
+    private fun indentationMatch(candidate: IndexedLine, cursorContext: CursorContext): Double {
+        val cursorDepth = indentDepth(cursorContext.leadingWhitespace)
+        val candidateDepth = indentDepth(candidate.leadingWhitespace)
+        val diff = abs(cursorDepth - candidateDepth)
+        return when {
+            diff == 0 -> 1.0
+            diff == 1 -> 0.6
+            else -> 0.2
+        }
+    }
+
+    private fun indentDepth(ws: String): Int = ws.sumOf { if (it == '\t') 4 else 1 }
 
     private fun proximity(candidate: IndexedLine, cursorContext: CursorContext): Double {
         if (candidate.sourceFilePath == cursorContext.filePath) {
